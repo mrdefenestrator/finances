@@ -1,0 +1,210 @@
+# Finances Tracker — YAML data model
+# Aligns with DESIGN.md: accounts, scheduled income and expenses,
+# non-liquid assets, debts. One document = one snapshot (e.g. household).
+
+title: finances
+type: object
+additionalProperties: false
+properties:
+  $schema:
+    type: string
+    description: Optional local reference to this schema (e.g. ../schema.yaml).
+  accounts:
+    type: array
+    description: >
+      Monetary balances (bank accounts, loans, wallets, apps). Type determines
+      inclusion in liquid total (1) and credit-card adjustment (2).
+    items:
+      title: account
+      type: object
+      properties:
+        id:
+          type: integer
+          description: Unique identifier (incrementing integer). Referenced by income/expense autoAccountRef.
+        name:
+          type: string
+          description: Short label (e.g. "Checking", "Amex")
+        type:
+          type: string
+          enum:
+            [
+              credit_card,
+              checking,
+              savings,
+              gift_card,
+              wallet,
+              digital_wallet,
+              loan,
+              other,
+            ]
+          description: >
+            Specific account kind. Internally mapped for calculations: checking, savings,
+            gift_card, wallet, digital_wallet → liquid (included in (1) and (2));
+            credit_card → debt subtracted in (2); loan, other → other (not in (1) or (2)).
+        balance:
+          type: number
+          description: >
+            For liquid and other accounts, current balance. Do not set for
+            credit_card; use limit and available instead (balance = available - limit).
+        limit:
+          type: number
+          description: >
+            For credit_card accounts, the card's credit limit. Required for
+            credit_card together with available; balance (owed) is computed as available - limit.
+        available:
+          type: number
+          description: >
+            For credit_card accounts, available credit. Required for credit_card
+            together with limit; balance (owed) is computed as available - limit.
+        rewards_balance:
+          type: number
+          description: Optional. For credit_card accounts only; rewards points or cash-back balance.
+        statement_balance:
+          type: number
+          description: Optional. For credit_card accounts only; current statement balance (amount due on statement).
+        statement_due_day_of_month:
+          type: integer
+          minimum: 1
+          maximum: 31
+          description: Optional. For credit_card accounts only; day of month (1–31) the statement is due.
+        paymentAccountRef:
+          type: integer
+          description: Optional. Account id from which this credit card's balance is automatically paid.
+        asOfDate:
+          type: string
+          format: ISO8601
+          description: Optional date as of which balance was recorded.
+        minimum_balance:
+          type: number
+          description: Optional. Target or floor balance to maintain (e.g. for checking/savings).
+        institution:
+          type: string
+          description: Optional (e.g. bank name, "Cash")
+        partial_account_number:
+          type: string
+          description: Optional. When present, displayed after the account name in square brackets (e.g. [2154] for last 4 digits).
+      required:
+        - id
+        - name
+        - type
+      additionalProperties: false
+
+  budget:
+    type: array
+    description: >
+      Scheduled income and expenses. kind field distinguishes each entry.
+      Once real, reflected in account balances; no separate transaction log.
+    items:
+      title: budgetEntry
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [income, expense]
+          description: "Whether this entry is income or an expense."
+        description:
+          type: string
+          description: Label (e.g. "Salary", "Rent")
+        type:
+          type: string
+          enum: [salary, refund, bonus, remittance, housing, insurance, service, utility, product, transport, food]
+          description: Optional. Category of income or expense.
+        amount:
+          type: number
+        recurrence:
+          type: string
+          enum: [one_time, monthly, biweekly, quarterly, semiannual, annual]
+        date:
+          type: string
+          format: ISO8601
+          description: For one_time, the date of the payment or expense.
+        dayOfMonth:
+          type: integer
+          minimum: 1
+          maximum: 31
+          description: "For monthly, quarterly, semiannual: day of month (1–31). For annual use dayOfYear."
+        month:
+          type: integer
+          minimum: 1
+          maximum: 12
+          description: "For quarterly, semiannual, annual: month (1–12). Quarterly = that month and every 3 months; semiannual = that month and 6 months later."
+        dayOfYear:
+          type: integer
+          minimum: 1
+          maximum: 31
+          description: For annual, day of month (optional; dayOfMonth also accepted).
+        continuous:
+          type: boolean
+          default: false
+          description: >
+            If true with monthly recurrence, amount is prorated by the proportion
+            of the month remaining (for projection to EOM). Use for items like
+            food or gas that are spent over the month rather than on a fixed day.
+        autoAccountRef:
+          type: integer
+          description: Optional. Account id where this income is deposited or expense is paid (e.g. autopay/direct deposit).
+      required:
+        - kind
+        - description
+        - amount
+        - recurrence
+      additionalProperties: false
+
+  assets:
+    type: array
+    description: >
+      Non-liquid assets and debts, unified by a kind field. Assets have estimated
+      value; debts have a balance owed. Debts may link to assets via assetRef = asset.id.
+      Used for (5) and (6).
+    items:
+      title: assetEntry
+      type: object
+      properties:
+        kind:
+          type: string
+          enum: [asset, debt]
+          description: "Whether this entry is an asset or a debt."
+        id:
+          type: integer
+          description: Unique identifier (incrementing integer). Required for asset entries; referenced by debt assetRef. Not used for debt entries.
+        name:
+          type: string
+          description: Unique label (e.g. "Primary residence", "Mortgage").
+        institution:
+          type: string
+          description: Optional (e.g. bank name, brokerage, lender name, "Personal").
+        value:
+          type: number
+          description: For asset entries — estimated value from authoritative source (per unit when quantity is used).
+        quantity:
+          type: number
+          description: Optional. Number of units; default 1. Subtotal = value × quantity (assets) or balance × quantity (debts).
+        source:
+          type: string
+          description: For asset entries — optional (e.g. "Zillow", "KBB", "Manual").
+        balance:
+          type: number
+          description: For debt entries — current balance owed (positive); per unit when quantity is used; subtotal = balance × quantity.
+        assetRef:
+          type: integer
+          description: For debt entries — id of the asset this loan is secured by (must match an asset entry id).
+        interestRate:
+          type: number
+          description: For debt entries — optional. Annual interest rate as decimal (e.g. 0.05 for 5%).
+        nextDueDate:
+          type: string
+          format: ISO8601
+          description: For debt entries — optional; next payment due date.
+        asOfDate:
+          type: string
+          format: ISO8601
+          description: Optional; date as of which balance/value was recorded.
+      required:
+        - kind
+        - name
+      additionalProperties: false
+
+required:
+  - accounts
+  - budget
+  - assets
