@@ -13,6 +13,8 @@ RUN uv sync --frozen --no-dev
 COPY finances/ ./finances/
 COPY web/ ./web/
 COPY finances.py ./
+COPY validate_yaml.py ./
+COPY schema.yaml ./
 
 EXPOSE 5001
 
