@@ -21,11 +21,23 @@ jobs:
       - name: Install mise
         uses: jdx/mise-action@v2
 
+      - name: Format check
+        run: mise run format-check
+
+      - name: Lint
+        run: mise run lint
+
+      - name: Validate YAML
+        run: mise run validate
+
+      - name: Test
+        run: mise run test
+
       - name: Install Playwright browsers
         run: mise run playwright-install
 
-      - name: Run CI checks
-        run: mise run ci
+      - name: Test e2e
+        run: mise run test-e2e
 
   build-and-push:
     needs: ci

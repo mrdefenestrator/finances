@@ -26,7 +26,7 @@ from finances import (
 
 def test_load_finances():
     """Load data file (finances.yaml validated by CI)."""
-    path = Path(__file__).parent.parent / "data" / "finances.yaml"
+    path = Path(__file__).parent / "fixtures" / "test_finances.yaml"
     data = load_finances(path)
     assert "accounts" in data
     assert "budget" in data
@@ -440,7 +440,7 @@ def test_status_command_exits_zero():
     """Status command runs and exits 0 (smoke test)."""
     from finances import main
 
-    path = Path(__file__).parent.parent / "data" / "finances.yaml"
+    path = Path(__file__).parent / "fixtures" / "test_finances.yaml"
     # Simulate: finances.py <path> status
     import sys
 

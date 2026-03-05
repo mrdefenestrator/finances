@@ -75,8 +75,8 @@ def main():
     data_dir = Path(__file__).parent / "data"
 
     if not data_dir.exists():
-        print(f"Error: data directory not found: {data_dir}")
-        return 1
+        print(f"Warning: data directory not found: {data_dir}")
+        return 0
 
     yaml_files = sorted(data_dir.glob("*.yaml")) + sorted(data_dir.glob("*.yml"))
 
