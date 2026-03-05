@@ -1,0 +1,10 @@
+services:
+  finances:
+    image: mrdefenestrator/finances:latest
+    ports:
+      - "5003:5001"
+    volumes:
+      - /volume1/docker/finances/data:/app/data
+    environment:
+      - FINANCES_DATA=/app/data/finances.yaml
+    restart: unless-stopped
