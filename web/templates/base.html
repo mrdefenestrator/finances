@@ -221,10 +221,18 @@
 <body class="h-full bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
     <header id="main-header" class="bg-blue-800 text-white shadow sticky top-0 z-50">
         <div class="px-4 flex items-end">
+            {% if filename %}
             <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
                 class="font-semibold text-lg text-white hover:text-blue-100 py-3 pr-6 shrink-0 whitespace-nowrap">
                 Finances{% if n2 is not none and n3 is not none and n6 is not none %}{% set _total = n2 + n3 + n6 %}<span class="ml-1 text-sm font-normal tabular-nums {% if _total | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ _total | fmt_money_header }}</span>{% endif %}
             </a>
+            {% else %}
+            <a href="{{ url_for('status.status_view') }}"
+                class="font-semibold text-lg text-white hover:text-blue-100 py-3 pr-6 shrink-0 whitespace-nowrap">
+                Finances
+            </a>
+            {% endif %}
+            {% if filename %}
             <nav class="flex">
                 <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
                     class="py-3 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {% if active_tab is defined and active_tab == 'accounts' %}border-white text-white{% else %}border-transparent text-blue-100 hover:text-white hover:border-blue-400{% endif %}">
@@ -239,6 +247,7 @@
                     Assets{% if n6 is not none %}<span class="ml-1 font-normal tabular-nums {% if n6 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n6 | fmt_money_header }}</span>{% endif %}
                 </a>
             </nav>
+            {% endif %}
 
             <!-- Lock/Unlock edit mode -->
             <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-3 ml-auto mr-2 shrink-0">

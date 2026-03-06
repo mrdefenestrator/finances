@@ -6,7 +6,7 @@ import shutil
 import yaml
 from flask import Blueprint, abort, current_app, redirect, request, url_for
 
-from .common import DATA_DIR, get_default_filename
+from .common import DATA_DIR
 
 files_bp = Blueprint("files", __name__, url_prefix="/files")
 
@@ -150,12 +150,14 @@ def delete():
 
     path.unlink()
 
-    # Navigate to default file or first remaining
-    default = get_default_filename()
     remaining_stems = _list_yaml_stems()
-    target = (
-        default
-        if default in remaining_stems
-        else (remaining_stems[0] if remaining_stems else default)
-    )
-    return _navigate_to_file(target)
+    if remaining_stems:
+        return _navigate_to_file(remaining_stems[0])
+
+    # No files left — go to root selection page
+    target = url_for("status.status_view")
+    if request.headers.get("HX-Request"):
+        resp = current_app.make_response("")
+        resp.headers["HX-Redirect"] = target
+        return resp
+    return redirect(target)

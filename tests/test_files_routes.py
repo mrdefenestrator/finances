@@ -160,12 +160,12 @@ def test_delete_file(client, data_dir):
 
 
 def test_delete_only_file(client, data_dir):
-    """Deleting the only file navigates to the default stem (even if now missing)."""
+    """Deleting the only file redirects to root file selection page."""
     resp = client.post(
         "/files/delete", data={"name": "finances.yaml"}, headers=HX_HEADERS
     )
     assert resp.status_code == 200
-    assert resp.headers.get("HX-Redirect") == "/f/finances/accounts"
+    assert resp.headers.get("HX-Redirect") == "/"
     assert not (data_dir / "finances.yaml").exists()
 
 

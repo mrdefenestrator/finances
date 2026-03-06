@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Select file — Finances{% endblock %}
+{% block content %}
+<div class="py-8 max-w-sm">
+    {% if available_files %}
+    <h1 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-3">Choose a file</h1>
+    <ul class="mb-6 space-y-1">
+        {% for f in available_files %}
+        <li>
+            <a href="{{ url_for('accounts.accounts_view', filename=f) }}"
+               class="block px-3 py-2 rounded bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900/30 hover:border-blue-300 text-sm">
+                {{ f }}
+            </a>
+        </li>
+        {% endfor %}
+    </ul>
+    {% else %}
+    <h1 class="text-lg font-semibold text-gray-800 dark:text-gray-100 mb-1">No data files yet</h1>
+    <p class="text-sm text-gray-500 dark:text-gray-400 mb-4">Create a file to get started.</p>
+    {% endif %}
+
+    <h2 class="text-sm font-medium text-gray-600 dark:text-gray-300 mb-2">New file</h2>
+    <form method="POST" action="{{ url_for('files.new') }}" class="flex gap-2">
+        <input type="text" name="name" placeholder="finances" required
+            class="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500">
+        <button type="submit"
+            class="px-4 py-2 bg-blue-600 text-white text-sm rounded hover:bg-blue-700">
+            Create
+        </button>
+    </form>
+</div>
+{% endblock %}
