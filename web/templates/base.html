@@ -171,16 +171,9 @@
             gap: 0;
         }
 
-        /* Editable tables: fixed layout so column widths are stable between locked/edit modes */
-        table.editable-table {
-            table-layout: fixed;
-        }
-
         table.editable-table thead th,
         table.editable-table tbody td {
             white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
         }
 
         /* Actions column: fixed width to stay compact */
@@ -220,7 +213,8 @@
 
 <body class="h-full bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
     <header id="main-header" class="bg-blue-800 text-white shadow sticky top-0 z-50">
-        <div class="px-4 flex items-end">
+        <div class="flex items-end">
+            <div class="flex items-end overflow-x-auto px-4 flex-1 min-w-0">
             {% if filename %}
             <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
                 class="font-semibold text-lg text-white hover:text-blue-100 py-3 pr-6 shrink-0 whitespace-nowrap">
@@ -248,9 +242,11 @@
                 </a>
             </nav>
             {% endif %}
+            </div><!-- end scrollable left -->
 
+            <div class="flex items-end px-2 shrink-0">
             <!-- Lock/Unlock edit mode -->
-            <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-3 ml-auto mr-2 shrink-0">
+            <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-3">
                 {% if edit_mode %}
                 <button type="submit" title="Exit edit mode"
                     class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-amber-400 text-amber-900 hover:bg-amber-300 transition-colors">
@@ -419,6 +415,7 @@
                     </template>
                 </div>
             </div>
+            </div><!-- end fixed right -->
         </div>
     </header>
 

@@ -115,20 +115,7 @@
 <div class="table-scroll-container rounded-b-lg border-l border-b border-r border-gray-300 dark:border-gray-600 shadow-sm">
 <table class="editable-table sortable w-full text-sm border-collapse bg-white dark:bg-gray-800" {% if
     sort_col %}data-sort-col="{{ sort_col }}" {% endif %} {% if sort_dir %}data-sort-dir="{{ sort_dir }}" {% endif %}>
-    <colgroup>
-        <col style="width:6%">  <!-- Kind -->
-        <col style="width:10%"> <!-- Type -->
-        <col style="width:17%"> <!-- Description -->
-        <col style="width:8%">  <!-- Amount -->
-        <col style="width:8%">  <!-- Remaining -->
-        <col style="width:8%">  <!-- Monthly -->
-        <col style="width:8%">  <!-- Annual -->
-        <col style="width:9%">  <!-- Recurrence -->
-        <col style="width:8%">  <!-- When -->
-        <col style="width:12%"> <!-- Auto account -->
-        <!-- Actions col: width from .table-actions-cell CSS -->
-    </colgroup>
-    {% with headers=headers, right_align_cols=[3, 4, 5, 6, 8] %}{% include "partials/editable_table_thead.html" %}{% endwith %}
+{% with headers=headers, right_align_cols=[3, 4, 5, 6, 8] %}{% include "partials/editable_table_thead.html" %}{% endwith %}
     <tbody id="budget-tbody">
         {% include "partials/budget_tbody.html" %}
     </tbody>
