@@ -215,9 +215,9 @@ def _subtotal_remainder_of_month(
     if rec == "annual":
         if entry.get("month") != month:
             return 0.0
-        doy = entry.get("dayOfYear")
         dom = entry.get("dayOfMonth")
-        day_val = doy if doy is not None else dom
+        doy = entry.get("dayOfYear")
+        day_val = dom if dom is not None else doy
         if day_val is None:
             return amount
         return amount if day < day_val else 0.0

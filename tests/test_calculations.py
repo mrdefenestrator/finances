@@ -214,6 +214,19 @@ def test_subtotal_annual_no_day():
     assert _subtotal_remainder_of_month(entry, 2025, 2, day=10) == 500
 
 
+def test_subtotal_annual_both_day_fields_prefers_dayOfMonth():
+    """When both dayOfMonth and dayOfYear are present, dayOfMonth wins."""
+    entry = {
+        "amount": 500,
+        "recurrence": "annual",
+        "month": 3,
+        "dayOfMonth": 20,
+        "dayOfYear": 5,
+    }
+    assert _subtotal_remainder_of_month(entry, 2025, 3, day=10) == 500
+    assert _subtotal_remainder_of_month(entry, 2025, 3, day=25) == 0
+
+
 def test_subtotal_quarterly_not_in_quarter():
     entry = {"amount": 300, "recurrence": "quarterly", "month": 1, "dayOfMonth": 15}
     # Month 2 is not in quarter starting month 1 (1,4,7,10)
