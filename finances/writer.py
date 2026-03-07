@@ -11,6 +11,69 @@ from .loader import load_finances
 import validate_yaml
 
 
+_INCOME_VALID_TYPES = frozenset(["salary", "refund", "bonus", "remittance"])
+_EXPENSE_VALID_TYPES = frozenset(
+    ["housing", "insurance", "service", "utility", "product", "transport", "food"]
+)
+_ASSET_JUNK_FIELDS = frozenset(["balance", "assetRef", "interestRate", "nextDueDate"])
+_DEBT_JUNK_FIELDS = frozenset(["id", "value", "source"])
+_CC_JUNK_FIELDS = frozenset(["balance", "minimum_balance"])
+_NON_CC_JUNK_FIELDS = frozenset(
+    [
+        "limit",
+        "available",
+        "rewards_balance",
+        "statement_balance",
+        "statement_due_day_of_month",
+        "paymentAccountRef",
+    ]
+)
+
+
+def _sanitize_budget_entry(entry: Dict[str, Any]) -> None:
+    """Strip fields that are invalid for the entry's kind."""
+    kind = entry.get("kind")
+    if kind == "income":
+        entry.pop("continuous", None)
+        if entry.get("type") not in _INCOME_VALID_TYPES:
+            entry.pop("type", None)
+    elif kind == "expense":
+        if entry.get("type") not in _EXPENSE_VALID_TYPES:
+            entry.pop("type", None)
+
+
+def _sanitize_asset_entry(entry: Dict[str, Any]) -> None:
+    """Strip fields that are invalid for the entry's kind."""
+    kind = entry.get("kind")
+    if kind == "asset":
+        for field in _ASSET_JUNK_FIELDS:
+            entry.pop(field, None)
+    elif kind == "debt":
+        for field in _DEBT_JUNK_FIELDS:
+            entry.pop(field, None)
+
+
+def _sanitize_account(account: Dict[str, Any]) -> None:
+    """Strip fields that are invalid for the account's type."""
+    atype = account.get("type")
+    if atype == "credit_card":
+        for field in _CC_JUNK_FIELDS:
+            account.pop(field, None)
+    else:
+        for field in _NON_CC_JUNK_FIELDS:
+            account.pop(field, None)
+
+
+def _sanitize_data(data: Dict[str, Any]) -> None:
+    """Strip kind-mismatched fields from all entries. Called before validation."""
+    for account in data.get("accounts") or []:
+        _sanitize_account(account)
+    for entry in data.get("budget") or []:
+        _sanitize_budget_entry(entry)
+    for entry in data.get("assets") or []:
+        _sanitize_asset_entry(entry)
+
+
 def _save_finances(path: Path, data: Dict[str, Any]) -> None:
     """Write data to YAML file. Preserves key order; use camelCase keys in data."""
     with open(path, "w") as f:
@@ -25,7 +88,8 @@ def _save_finances(path: Path, data: Dict[str, Any]) -> None:
 
 
 def _validate_and_save(path: Path, data: Dict[str, Any]) -> None:
-    """Validate data against schema; if OK write to path, else raise ValueError with errors."""
+    """Sanitize, validate data against schema; if OK write to path, else raise ValueError with errors."""
+    _sanitize_data(data)
     schema = validate_yaml.load_schema()
     errors = validate_yaml.validate_finances_data(data, schema)
     if errors:

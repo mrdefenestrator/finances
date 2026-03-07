@@ -7,6 +7,24 @@ from pathlib import Path
 import yaml
 from jsonschema import validate, ValidationError
 
+_INCOME_ONLY_TYPES = frozenset(["salary", "refund", "bonus", "remittance"])
+_EXPENSE_ONLY_TYPES = frozenset(
+    ["housing", "insurance", "service", "utility", "product", "transport", "food"]
+)
+_ASSET_DEBT_FIELDS = frozenset(["balance", "assetRef", "interestRate", "nextDueDate"])
+_DEBT_ASSET_FIELDS = frozenset(["id", "value", "source"])
+_CC_ONLY_FIELDS = frozenset(
+    [
+        "limit",
+        "available",
+        "rewards_balance",
+        "statement_balance",
+        "statement_due_day_of_month",
+        "paymentAccountRef",
+    ]
+)
+_NON_CC_ONLY_FIELDS = frozenset(["balance", "minimum_balance"])
+
 
 def load_schema() -> dict:
     """Load the JSON schema from schema.yaml."""
@@ -15,32 +33,66 @@ def load_schema() -> dict:
         return yaml.safe_load(f)
 
 
-def _validate_accounts(data: dict, filepath: Path = None) -> list:
-    """Validate account rules: credit_card requires limit+available; all other types require balance."""
+def _check_junk_fields(data: dict) -> list:
+    """Report kind-mismatched fields on budget, asset, and account entries."""
     errors = []
-    for i, a in enumerate(data.get("accounts") or []):
-        name = a.get("name", f"<account {i}>")
-        atype = a.get("type")
-        if atype == "credit_card":
-            if a.get("limit") is None:
-                errors.append(f"Account '{name}': credit_card requires 'limit'")
-            if a.get("available") is None:
-                errors.append(f"Account '{name}': credit_card requires 'available'")
-        else:
-            # All other types (checking, savings, gift_card, wallet, digital_wallet, loan, other)
-            if "balance" not in a:
+
+    for i, entry in enumerate(data.get("budget") or []):
+        kind = entry.get("kind")
+        label = f"Budget entry {i} '{entry.get('description', '')}'"
+        if kind == "income":
+            if "continuous" in entry:
                 errors.append(
-                    f"Account '{name}': {atype or 'unknown'} requires 'balance'"
+                    f"{label}: 'continuous' is only valid for expense entries"
                 )
+            if entry.get("type") in _EXPENSE_ONLY_TYPES:
+                errors.append(
+                    f"{label}: type '{entry['type']}' is only valid for expense entries"
+                )
+        elif kind == "expense":
+            if entry.get("type") in _INCOME_ONLY_TYPES:
+                errors.append(
+                    f"{label}: type '{entry['type']}' is only valid for income entries"
+                )
+
+    for i, entry in enumerate(data.get("assets") or []):
+        kind = entry.get("kind")
+        label = f"Asset entry {i} '{entry.get('name', '')}'"
+        if kind == "asset":
+            for field in _ASSET_DEBT_FIELDS:
+                if field in entry:
+                    errors.append(f"{label}: '{field}' is only valid for debt entries")
+        elif kind == "debt":
+            for field in _DEBT_ASSET_FIELDS:
+                if field in entry:
+                    errors.append(f"{label}: '{field}' is only valid for asset entries")
+
+    for i, account in enumerate(data.get("accounts") or []):
+        atype = account.get("type")
+        label = f"Account {i} '{account.get('name', '')}'"
+        if atype == "credit_card":
+            for field in _NON_CC_ONLY_FIELDS:
+                if field in account:
+                    errors.append(
+                        f"{label}: '{field}' is not valid for credit_card accounts"
+                    )
+        else:
+            for field in _CC_ONLY_FIELDS:
+                if field in account:
+                    errors.append(
+                        f"{label}: '{field}' is only valid for credit_card accounts"
+                    )
+
     return errors
 
 
 def validate_finances_data(data: dict, schema: dict) -> list:
     """Validate a finances data dict against the schema. Returns list of error strings."""
-    errors = []
+    errors = _check_junk_fields(data)
+    if errors:
+        return errors
     try:
         validate(instance=data, schema=schema)
-        errors.extend(_validate_accounts(data))
     except ValidationError as e:
         errors.append(f"Schema validation error: {getattr(e, 'message', str(e))}")
         if e.path:
@@ -52,21 +104,14 @@ def validate_finances_data(data: dict, schema: dict) -> list:
 
 def validate_finances_file(filepath: Path, schema: dict) -> list:
     """Validate a single finances YAML file. Returns list of errors."""
-    errors = []
     try:
         with open(filepath) as f:
             data = yaml.safe_load(f)
-        validate(instance=data, schema=schema)
-        errors.extend(_validate_accounts(data, filepath))
     except yaml.YAMLError as e:
-        errors.append(f"YAML parse error: {e}")
-    except ValidationError as e:
-        errors.append(f"Schema validation error: {getattr(e, 'message', str(e))}")
-        if e.path:
-            errors.append(f"  at path: {'.'.join(str(p) for p in e.path)}")
+        return [f"YAML parse error: {e}"]
     except Exception as e:
-        errors.append(f"Error: {e}")
-    return errors
+        return [f"Error: {e}"]
+    return validate_finances_data(data, schema)
 
 
 def main():

@@ -254,15 +254,12 @@ def test_budget_when_monthly_day_edit(page, flask_server):
     when_cell = salary_row.locator("td").nth(5)
     when_cell.click()
 
-    # Should show compound editor with dayOfMonth input and continuous checkbox
+    # Should show compound editor with dayOfMonth input (no continuous for income)
     editing_cell = salary_row.locator("td.cell-editing")
     day_input = editing_cell.locator("input[name='dayOfMonth']")
     day_input.wait_for(state="visible")
     assert day_input.input_value() == "1"
-
-    cont_cb = editing_cell.locator("input[name='continuous_cb']")
-    assert cont_cb.is_visible()
-    assert not cont_cb.is_checked()
+    assert not editing_cell.locator("input[name='continuous_cb']").is_visible()
 
     # Change to day 5
     day_input.fill("5")
@@ -316,17 +313,17 @@ def test_budget_when_continuous_toggle_off(page, flask_server):
 
 
 def test_budget_when_continuous_toggle_on(page, flask_server):
-    """Checking continuous on a monthly entry saves it correctly."""
+    """Checking continuous on a monthly expense entry saves it correctly."""
     page.goto(f"{flask_server}/f/test_finances/budget")
     enable_edit_mode(page)
 
-    # Find the Salary row (monthly, dayOfMonth=1) and click its When cell
-    salary_row = page.locator("#budget-tbody tr:has-text('Salary')").first
-    when_cell = salary_row.locator("td").nth(5)
+    # Find the Rent row (monthly expense, dayOfMonth=1, no continuous) and click its When cell
+    rent_row = page.locator("#budget-row-3")
+    when_cell = rent_row.locator("td").nth(5)
     when_cell.click()
 
     # Check continuous
-    editing_cell = salary_row.locator("td.cell-editing")
+    editing_cell = rent_row.locator("td.cell-editing")
     cont_cb = editing_cell.locator("input[name='continuous_cb']")
     cont_cb.wait_for(state="visible")
     assert not cont_cb.is_checked()
@@ -336,8 +333,8 @@ def test_budget_when_continuous_toggle_on(page, flask_server):
 
     # Reload and verify display shows "continuous"
     page.goto(f"{flask_server}/f/test_finances/budget")
-    salary_row = page.locator("#budget-tbody tr:has-text('Salary')").first
-    assert salary_row.get_by_text("continuous").is_visible()
+    rent_row = page.locator("#budget-row-3")
+    assert rent_row.get_by_text("continuous").is_visible()
 
 
 def test_budget_when_annual_compound_edit(page, flask_server):

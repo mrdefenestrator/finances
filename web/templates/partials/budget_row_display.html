@@ -57,7 +57,8 @@
             {% set when_update_url = url_for('budget.when_update', filename=filename, index=index) %}
             {% set when_cancel_url = url_for('budget.cell_edit', filename=filename, index=index, field='when', display=1) %}
             {% if editing_when_recurrence == 'monthly' %}
-                {# Monthly: number input for dayOfMonth + checkbox for continuous #}
+                {# Monthly: number input for dayOfMonth + checkbox for continuous (expense only) #}
+                {% if kind == 'expense' %}
                 <td class="cell-editing px-1.5 py-px border-r border-gray-100 last:border-r-0"
                     x-data="{ cont: {{ 'true' if editing_when_continuous else 'false' }} }">
                     <form method="post" action="{{ when_update_url }}" class="flex items-center gap-0.5"
@@ -81,6 +82,23 @@
                         <input type="hidden" name="continuous" :value="cont ? 'true' : 'false'" />
                     </form>
                 </td>
+                {% else %}
+                {# Income monthly: only dayOfMonth input, no continuous #}
+                <td class="cell-editing px-1.5 py-px border-r border-gray-100 last:border-r-0">
+                    <form method="post" action="{{ when_update_url }}" class="flex items-center gap-0.5"
+                          hx-post="{{ when_update_url }}"
+                          hx-trigger="save" hx-swap="innerHTML" hx-target="#budget-tbody"
+                          onkeydown="if(event.keyCode===13) event.preventDefault();">
+                        <input type="number" name="dayOfMonth" min="1" max="31"
+                               value="{{ editing_when_day or '' }}"
+                               class="table-cell-input" style="min-width:0; width:2.5rem"
+                               hx-post="{{ when_update_url }}"
+                               hx-trigger="focusout changed, keydown[keyCode==13]"
+                               hx-include="closest form" hx-swap="innerHTML" hx-target="#budget-tbody"
+                               autofocus />
+                    </form>
+                </td>
+                {% endif %}
             {% else %}
                 {# Annual / quarterly / semiannual: month select + day number input #}
                 <td class="cell-editing px-1.5 py-px border-r border-gray-100 last:border-r-0"

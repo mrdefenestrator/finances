@@ -376,6 +376,68 @@ def test_move_invalid_direction(temp_data_file):
         move_account(temp_data_file, 1, "left")
 
 
+# =============================================================================
+# Sanitization tests
+# =============================================================================
+
+
+def test_sanitize_strips_continuous_from_income(temp_data_file):
+    """Updating income entry to add 'continuous' strips it before saving."""
+    # budget[0] is Salary (kind=income)
+    update_budget_entry(temp_data_file, 0, {"continuous": True})
+    data = load_finances(temp_data_file)
+    assert "continuous" not in data["budget"][0]
+
+
+def test_sanitize_strips_invalid_type_from_income(temp_data_file):
+    """Updating income entry with expense-only type strips 'type' before saving."""
+    update_budget_entry(temp_data_file, 0, {"type": "housing"})
+    data = load_finances(temp_data_file)
+    assert "type" not in data["budget"][0]
+
+
+def test_sanitize_strips_balance_from_asset(temp_data_file):
+    """Updating asset entry to add 'balance' strips it before saving."""
+    # assets[0] is Home (kind=asset)
+    update_asset_entry(temp_data_file, 0, {"balance": 999})
+    data = load_finances(temp_data_file)
+    assert "balance" not in data["assets"][0]
+
+
+def test_sanitize_strips_value_from_debt(temp_data_file):
+    """Updating debt entry to add 'value' strips it before saving."""
+    # assets[2] is Mortgage (kind=debt)
+    update_asset_entry(temp_data_file, 2, {"value": 500000})
+    data = load_finances(temp_data_file)
+    assert "value" not in data["assets"][2]
+
+
+def test_sanitize_strips_limit_from_non_cc_account(temp_data_file):
+    """Updating non-CC account to add 'limit' strips it before saving."""
+    # account id=1 is Checking (type=checking)
+    update_account(temp_data_file, 1, {"limit": 5000})
+    data = load_finances(temp_data_file)
+    acc = next(a for a in data["accounts"] if a["id"] == 1)
+    assert "limit" not in acc
+
+
+def test_sanitize_strips_balance_from_credit_card(temp_data_file):
+    """Adding credit_card account with 'balance' strips it before saving."""
+    add_account(
+        temp_data_file,
+        {
+            "name": "Amex",
+            "type": "credit_card",
+            "limit": 5000,
+            "available": 4500,
+            "balance": 500,
+        },
+    )
+    data = load_finances(temp_data_file)
+    cc = next(a for a in data["accounts"] if a["name"] == "Amex")
+    assert "balance" not in cc
+
+
 def test_operations_on_empty_collections():
     """Operations on empty collections handle gracefully."""
     data = {
