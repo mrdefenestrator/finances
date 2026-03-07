@@ -61,7 +61,7 @@
             {% endfor %}
         </select>
     </td>
-    <td class="table-actions-cell px-1.5 py-0.5">
+    <td class="table-actions-cell px-1.5 py-0.5 text-center">
         <form id="budget-add-form"
             @submit.prevent="
                 fetch('{{ url_for('budget.add', filename=filename) }}', {

@@ -32,7 +32,7 @@
         <input type="number" step="any" name="quantity" placeholder="—" class="table-cell-input text-right"
             form="assets-add-form" />
     </td>
-    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 dark:border-gray-700 bg-gray-50 dark:bg-gray-700"></td>
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
     <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700" data-field="reference">
         <input type="text" name="source" placeholder="—" class="table-cell-input"
             form="assets-add-form" />
@@ -44,7 +44,7 @@
             :disabled="kind === 'asset'"
             form="assets-add-form" />
     </td>
-    <td class="table-actions-cell px-1.5 py-0.5">
+    <td class="table-actions-cell px-1.5 py-0.5 text-center">
         <form id="assets-add-form"
             @submit.prevent="
                 fetch('{{ url_for('assets.add', filename=filename) }}', {
