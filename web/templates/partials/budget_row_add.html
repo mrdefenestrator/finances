@@ -1,5 +1,5 @@
 {# Add row for budget - one row with kind selector #}
-<tr id="budget-add-row" class="border-b border-dashed border-gray-300 dark:border-gray-600 bg-blue-50 dark:bg-blue-900/20" data-add-row
+<tr id="budget-add-row" class="border-b border-dashed border-gray-300 dark:border-gray-600 bg-blue-50 dark:bg-blue-950" data-add-row
     x-data="{ kind: 'income' }"
     x-effect="
         let ts = document.getElementById('budget-add-type');
@@ -38,9 +38,6 @@
         <input type="number" step="any" name="amount" placeholder="0" class="table-cell-input text-right"
             form="budget-add-form" />
     </td>
-    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
-    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
-    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
     <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
         <select name="recurrence" class="table-cell-select" form="budget-add-form">
             <option value="">—</option>
@@ -53,6 +50,9 @@
         <input type="number" min="1" max="31" name="dayOfMonth" placeholder="—" class="table-cell-input text-right"
             form="budget-add-form" />
     </td>
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700 text-right tabular-nums text-gray-400">—</td>
     <td class="cell-editing px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700">
         <select name="autoAccountRef" class="table-cell-select" form="budget-add-form">
             <option value="">—</option>
