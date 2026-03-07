@@ -204,9 +204,9 @@ def test_budget_when_one_time_date_picker(page, flask_server):
     page.goto(f"{flask_server}/f/test_finances/budget")
     enable_edit_mode(page)
 
-    # Find the Tax Refund row (one_time) and click its When cell (col index 8)
+    # Find the Tax Refund row (one_time) and click its When cell (col index 5)
     refund_row = page.locator("#budget-tbody tr:has-text('Tax Refund')").first
-    when_cell = refund_row.locator("td").nth(8)
+    when_cell = refund_row.locator("td").nth(5)
     when_cell.click()
 
     # Should show a text input for the date value
@@ -221,7 +221,7 @@ def test_budget_when_one_time_sets_date(page, flask_server):
     enable_edit_mode(page)
 
     refund_row = page.locator("#budget-tbody tr:has-text('Tax Refund')").first
-    when_cell = refund_row.locator("td").nth(8)
+    when_cell = refund_row.locator("td").nth(5)
     when_cell.click()
 
     date_input = page.locator("#budget-tbody input[name='value']")
@@ -251,7 +251,7 @@ def test_budget_when_monthly_day_edit(page, flask_server):
 
     # Find the Salary row (monthly, dayOfMonth=1) and click its When cell
     salary_row = page.locator("#budget-tbody tr:has-text('Salary')").first
-    when_cell = salary_row.locator("td").nth(8)
+    when_cell = salary_row.locator("td").nth(5)
     when_cell.click()
 
     # Should show compound editor with dayOfMonth input and continuous checkbox
@@ -282,7 +282,7 @@ def test_budget_when_continuous_toggle_off(page, flask_server):
 
     # Find the Groceries row (monthly, continuous=true) and click its When cell
     groceries_row = page.locator("#budget-tbody tr:has-text('Groceries')").first
-    when_cell = groceries_row.locator("td").nth(8)
+    when_cell = groceries_row.locator("td").nth(5)
     when_cell.click()
 
     # Should show compound editor with checkbox checked
@@ -322,7 +322,7 @@ def test_budget_when_continuous_toggle_on(page, flask_server):
 
     # Find the Salary row (monthly, dayOfMonth=1) and click its When cell
     salary_row = page.locator("#budget-tbody tr:has-text('Salary')").first
-    when_cell = salary_row.locator("td").nth(8)
+    when_cell = salary_row.locator("td").nth(5)
     when_cell.click()
 
     # Check continuous
@@ -347,7 +347,7 @@ def test_budget_when_annual_compound_edit(page, flask_server):
 
     # Find the Car Insurance row (annual, month=3, dayOfMonth=15) and click its When cell
     row = page.locator("#budget-tbody tr:has-text('Car Insurance')").first
-    when_cell = row.locator("td").nth(8)
+    when_cell = row.locator("td").nth(5)
     when_cell.click()
 
     # Should show compound editor with month select and day input

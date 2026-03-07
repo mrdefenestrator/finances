@@ -341,8 +341,8 @@ class TestBuildBudgetTable:
         assert "Monthly" in headers
         assert "Annual" in headers
         # Monthly = 100, Annual = 100 * 12 = 1200
-        assert "$100.00" in rows[0][5]
-        assert "$1,200.00" in rows[0][6]
+        assert "$100.00" in rows[0][7]
+        assert "$1,200.00" in rows[0][8]
 
     def test_auto_account_ref(self):
         account_map = {1: "Chase Checking"}

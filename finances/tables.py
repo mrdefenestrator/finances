@@ -207,11 +207,11 @@ def _build_budget_table(
         "Type",
         "Description",
         "Amount",
+        "Recurrence",
+        "When",
         "Remaining",
         "Monthly",
         "Annual",
-        "Recurrence",
-        "When",
         "Auto account",
     ]
     if show_index:
@@ -239,11 +239,11 @@ def _build_budget_table(
             fmt_type_display(e.get("type") or "-"),
             e.get("description", "-"),
             fmt_money(sign * e.get("amount", 0)),
+            fmt_recurrence_display(e.get("recurrence") or "-"),
+            _expected_display(e),
             fmt_money(sign * st),
             fmt_money(sign * monthly_amt),
             fmt_money(sign * annual_amt),
-            fmt_recurrence_display(e.get("recurrence") or "-"),
-            _expected_display(e),
             _auto_account(e),
         ]
         if show_index:
@@ -253,9 +253,9 @@ def _build_budget_table(
     total_row = [""] * num_cols
     total_row[0] = "Total"
     offset = 1 if show_index else 0
-    total_row[4 + offset] = fmt_money(total_subtotal)
-    total_row[5 + offset] = fmt_money(total_monthly)
-    total_row[6 + offset] = fmt_money(total_annual)
+    total_row[6 + offset] = fmt_money(total_subtotal)
+    total_row[7 + offset] = fmt_money(total_monthly)
+    total_row[8 + offset] = fmt_money(total_annual)
     _append_table_separator_and_total(rows, headers, total_row)
     return (headers, rows)
 
