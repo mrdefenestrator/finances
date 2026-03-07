@@ -72,7 +72,9 @@
             {% endfor %}
         </select>
     </td>
-    <td class="table-actions-cell px-1.5 py-0.5">
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700"></td>
+    <td class="px-1.5 py-0.5 border-r border-gray-100 dark:border-gray-700"></td>
+    <td class="table-actions-cell px-1.5 py-0.5 text-center">
         <form id="accounts-add-form" hx-post="{{ url_for('accounts.add', filename=filename) }}" hx-target="#accounts-add-row"
             hx-swap="beforebegin"
             hx-on::after-request="if(event.detail.successful) { this.reset(); }">

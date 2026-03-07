@@ -95,6 +95,29 @@ def test_add_account_row(page, flask_server):
     assert page.locator("#accounts-tbody").get_by_text("Savings Account").is_visible()
 
 
+def test_add_credit_card_account(page, flask_server):
+    """Adding a credit card account saves CC-specific fields."""
+    page.goto(f"{flask_server}/f/test_finances/accounts")
+    enable_edit_mode(page)
+
+    add_row = page.locator("#accounts-add-row")
+    add_row.locator("select[name='type']").select_option("credit_card")
+    page.wait_for_timeout(200)
+
+    add_row.locator("input[name='name']").fill("Travel Card")
+    add_row.locator("input[name='limit']").fill("5000")
+    add_row.locator("input[name='available']").fill("4500")
+
+    with page.expect_response(
+        lambda r: "/accounts/add" in r.url and r.request.method == "POST",
+        timeout=5000,
+    ):
+        add_row.locator("button[title='Add']").click()
+
+    page.goto(f"{flask_server}/f/test_finances/accounts")
+    assert page.locator("#accounts-tbody").get_by_text("Travel Card").is_visible()
+
+
 def test_add_credit_card_fields_toggle(page, flask_server):
     """Selecting credit_card type enables CC-specific fields in add row."""
     page.goto(f"{flask_server}/f/test_finances/accounts")

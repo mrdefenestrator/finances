@@ -214,15 +214,15 @@ def add(filename: str):
         try:
             account["limit"] = float(request.form.get("limit") or 0)
             account["available"] = float(request.form.get("available") or 0)
+            for key in ("rewards_balance", "statement_balance"):
+                v = request.form.get(key, "").strip()
+                if v:
+                    account[key] = float(v)
+            due_day = request.form.get("statement_due_day_of_month", "").strip()
+            if due_day:
+                account["statement_due_day_of_month"] = int(due_day)
         except ValueError:
-            return (
-                render_template(
-                    "partials/accounts_row_edit.html",
-                    error="Invalid limit/available",
-                    account_types=ACCOUNT_TYPES,
-                ),
-                422,
-            )
+            return "", 422
         pay_ref_raw = request.form.get("paymentAccountRef", "").strip()
         if pay_ref_raw:
             try:
@@ -240,15 +240,8 @@ def add(filename: str):
             account[key] = v
     try:
         new_id = writer_add_account(path, account)
-    except ValueError as e:
-        return (
-            render_template(
-                "partials/accounts_row_edit.html",
-                error=str(e),
-                account_types=ACCOUNT_TYPES,
-            ),
-            422,
-        )
+    except ValueError:
+        return "", 422
     data = finances.load_finances(path)
     accounts = data.get("accounts") or []
     acc = next((a for a in accounts if a.get("id") == new_id), None)
