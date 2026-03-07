@@ -19,8 +19,9 @@ Finances tracker for accounts, scheduled income/expenses, assets, and debts. Com
 mise run setup             # Install all deps into .venv via uv sync
 
 # Run tests
-mise run test              # pytest with coverage (excludes e2e)
-mise run test-e2e          # Playwright e2e tests (requires browser)
+mise run test              # all CI checks (format, lint, validate, unit tests, e2e)
+mise run test-unit         # pytest unit tests with coverage (excludes e2e)
+mise run test-web          # Playwright web browser tests (requires browser)
 
 # Format code
 mise run format            # ruff formatter
@@ -32,9 +33,6 @@ mise run lint-fix          # auto-fix lint issues
 
 # Validate YAML files
 mise run validate
-
-# Run all CI checks (format-check, lint, validate, test)
-mise run ci
 
 # CLI usage
 uv run python finances.py data/finances.yaml status

@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Assets — Finances{% endblock %}
 {% block content %}
-<form id="assets-filter-form" method="get" action="{{ url_for('assets.assets_view', filename=filename) }}" class="sticky top-[52px] z-40">
+<form id="assets-filter-form" method="get" action="{{ url_for('assets.assets_view', filename=filename) }}" class="sticky top-[var(--header-h)] z-40">
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
     <div class="flex flex-wrap items-center gap-1.5 p-2 bg-white dark:bg-gray-800 rounded-t-lg border-l border-t border-r border-b border-gray-300 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
 

@@ -25,17 +25,17 @@ description = "Fix lint issues with ruff"
 run = "uv run python validate_yaml.py"
 description = "Validate finances YAML files against schema"
 
-[tasks.ci]
-depends = ["format-check", "lint", "validate", "test", "test-e2e"]
+[tasks.test]
+depends = ["format-check", "lint", "validate", "test-unit", "test-web"]
 description = "Run all CI checks"
 
-[tasks.test]
+[tasks.test-unit]
 run = "uv run pytest tests/ -v --cov=finances --cov-report=term-missing -m 'not e2e'"
-description = "Run tests with coverage (excludes e2e)"
+description = "Run unit tests with coverage"
 
-[tasks.test-e2e]
+[tasks.test-web]
 run = "uv run pytest tests/e2e/ -v"
-description = "Run end-to-end browser tests with Playwright"
+description = "Run web browser tests with Playwright"
 
 [tasks.playwright-install]
 run = "uv run playwright install chromium"

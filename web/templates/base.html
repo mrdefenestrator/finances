@@ -33,6 +33,10 @@
         htmx.config.defaultSwapStyle = 'innerHTML';
     </script>
     <style>
+        :root {
+            --header-h: 52px;
+        }
+
         /* Hide Alpine-controlled elements until Alpine initializes (prevents flash) */
         [x-cloak] { display: none !important; }
 
@@ -187,7 +191,7 @@
         /* Scrollable table container: data rows scroll, header/footer rows stick */
         .table-scroll-container {
             overflow: auto;
-            max-height: calc(100dvh - 8rem);
+            max-height: calc(100dvh - var(--header-h) - 4.5rem);
         }
 
         .table-scroll-container thead {
@@ -214,40 +218,23 @@
 
 <body class="h-full bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
     <header id="main-header" class="bg-blue-800 text-white shadow sticky top-0 z-50">
-        <div class="flex items-end">
-            <div class="flex items-end overflow-x-auto px-4 flex-1 min-w-0">
+        <!-- Row 1: title + controls -->
+        <div class="flex items-center px-4">
             {% if filename %}
             <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
-                class="font-semibold text-lg text-white hover:text-blue-100 py-3 pr-6 shrink-0 whitespace-nowrap">
+                class="font-semibold text-lg text-white hover:text-blue-100 py-2 pr-6 shrink-0 whitespace-nowrap">
                 Finances{% if n2 is not none and n3 is not none and n6 is not none %}{% set _total = n2 + n3 + n6 %}<span class="ml-1 text-sm font-normal tabular-nums {% if _total | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ _total | fmt_money_header }}</span>{% endif %}
             </a>
             {% else %}
             <a href="{{ url_for('status.status_view') }}"
-                class="font-semibold text-lg text-white hover:text-blue-100 py-3 pr-6 shrink-0 whitespace-nowrap">
+                class="font-semibold text-lg text-white hover:text-blue-100 py-2 pr-6 shrink-0 whitespace-nowrap">
                 Finances
             </a>
             {% endif %}
-            {% if filename %}
-            <nav class="flex">
-                <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
-                    class="py-3 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {% if active_tab is defined and active_tab == 'accounts' %}border-white text-white{% else %}border-transparent text-blue-100 hover:text-white hover:border-blue-400{% endif %}">
-                    Accounts{% if n2 is not none %}<span class="ml-1 font-normal tabular-nums {% if n2 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n2 | fmt_money_header }}</span>{% endif %}
-                </a>
-                <a href="{{ url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none) }}"
-                    class="py-3 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {% if active_tab is defined and active_tab == 'budget' %}border-white text-white{% else %}border-transparent text-blue-100 hover:text-white hover:border-blue-400{% endif %}">
-                    Budget{% if n3 is not none %}<span class="ml-1 font-normal tabular-nums {% if n3 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n3 | fmt_money_header }}</span>{% endif %}
-                </a>
-                <a href="{{ url_for('assets.assets_view', filename=filename, edit=1 if edit_mode else none) }}"
-                    class="py-3 px-4 text-sm font-medium border-b-2 transition-colors whitespace-nowrap {% if active_tab is defined and active_tab == 'assets' %}border-white text-white{% else %}border-transparent text-blue-100 hover:text-white hover:border-blue-400{% endif %}">
-                    Assets{% if n6 is not none %}<span class="ml-1 font-normal tabular-nums {% if n6 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n6 | fmt_money_header }}</span>{% endif %}
-                </a>
-            </nav>
-            {% endif %}
-            </div><!-- end scrollable left -->
 
-            <div class="flex items-end px-2 shrink-0">
+            <div class="flex items-center ml-auto gap-0 shrink-0">
             <!-- Lock/Unlock edit mode -->
-            <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-3">
+            <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-2">
                 {% if edit_mode %}
                 <button type="submit" title="Exit edit mode"
                     class="flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-medium bg-amber-400 text-amber-900 hover:bg-amber-300 transition-colors">
@@ -255,7 +242,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M8 11V7a4 4 0 018 0M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"/>
                     </svg>
-                    Editing
+                    <span class="hidden sm:inline">Editing</span>
                 </button>
                 {% else %}
                 <button type="submit" title="Enter edit mode"
@@ -264,7 +251,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
                     </svg>
-                    Locked
+                    <span class="hidden sm:inline">Locked</span>
                 </button>
                 {% endif %}
             </form>
@@ -280,7 +267,7 @@
                         (this.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches);
                     document.documentElement.classList.toggle('dark', isDark);
                 }
-            }" x-cloak class="flex items-center py-3 mr-1 shrink-0">
+            }" x-cloak class="flex items-center py-2 mr-1 shrink-0">
                 <button @click="cycle()" :title="'Theme: ' + theme + ' — click to cycle'"
                     class="flex items-center gap-1 px-2 py-1 rounded text-xs text-blue-100 hover:text-white hover:bg-blue-700 transition-colors">
                     <svg x-show="theme === 'light'" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -416,8 +403,29 @@
                     </template>
                 </div>
             </div>
-            </div><!-- end fixed right -->
-        </div>
+            </div><!-- end right controls -->
+        </div><!-- end row 1 -->
+
+        <!-- Row 2: nav tabs (full width) -->
+        {% if filename %}
+        <nav class="flex border-t border-blue-700">
+            <a href="{{ url_for('accounts.accounts_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'accounts' %}border-white text-white{% else %}border-transparent text-blue-100 hover:text-white hover:border-blue-400{% endif %}">
+                <span>Accounts</span>
+                {% if n2 is not none %}<span class="text-xs font-normal tabular-nums {% if n2 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n2 | fmt_money_header }}</span>{% endif %}
+            </a>
+            <a href="{{ url_for('budget.budget_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'budget' %}border-white text-white{% else %}border-transparent text-blue-100 hover:text-white hover:border-blue-400{% endif %}">
+                <span>Budget</span>
+                {% if n3 is not none %}<span class="text-xs font-normal tabular-nums {% if n3 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n3 | fmt_money_header }}</span>{% endif %}
+            </a>
+            <a href="{{ url_for('assets.assets_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="flex-1 py-2 flex flex-col items-center text-sm font-medium border-b-2 transition-colors {% if active_tab is defined and active_tab == 'assets' %}border-white text-white{% else %}border-transparent text-blue-100 hover:text-white hover:border-blue-400{% endif %}">
+                <span>Assets</span>
+                {% if n6 is not none %}<span class="text-xs font-normal tabular-nums {% if n6 | display_is_negative %}text-red-300{% else %}opacity-75{% endif %}">{{ n6 | fmt_money_header }}</span>{% endif %}
+            </a>
+        </nav>
+        {% endif %}
     </header>
 
     <main class="px-4 py-4">
@@ -425,6 +433,16 @@
     </main>
 
     <script src="{{ url_for('static', filename='js/sortable.js') }}"></script>
+    <script>
+        (function () {
+            var hdr = document.getElementById('main-header');
+            function updateHeaderH() {
+                document.documentElement.style.setProperty('--header-h', hdr.offsetHeight + 'px');
+            }
+            updateHeaderH();
+            window.addEventListener('resize', updateHeaderH);
+        })();
+    </script>
 </body>
 
 </html>

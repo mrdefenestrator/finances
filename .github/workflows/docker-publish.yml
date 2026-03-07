@@ -31,13 +31,13 @@ jobs:
         run: mise run validate
 
       - name: Test
-        run: mise run test
+        run: mise run test-unit
 
       - name: Install Playwright browsers
         run: mise run playwright-install
 
-      - name: Test e2e
-        run: mise run test-e2e
+      - name: Web Tests
+        run: mise run test-web
 
   build-and-push:
     needs: ci
