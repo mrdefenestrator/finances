@@ -160,16 +160,44 @@ def test_budget_filter_by_kind(page, flask_server):
     page.goto(f"{flask_server}/f/test_finances/budget")
 
     # Open Kind filter
-    page.locator("button.filter-dropdown-trigger:has-text('Kind')").click()
+    page.locator(".sm\\:flex button.filter-dropdown-trigger:has-text('Kind')").click()
 
     # Check income only
-    page.locator("input[name='include_kind'][value='income']").click()
+    page.locator(".sm\\:flex input[name='include_kind'][value='income']").click()
     page.wait_for_url("**/budget**include_kind**")
 
     tbody = page.locator("#budget-tbody")
     # Should show income items but not expenses
     assert tbody.get_by_text("Salary", exact=True).first.is_visible()
     # Rent is an expense - should not be shown in table rows
+    assert tbody.locator("tr").filter(has_text="Rent").count() == 0
+
+
+def test_budget_filter_by_kind_mobile(page, flask_server):
+    """On a mobile viewport, the mobile filter panel toggle opens filters that work."""
+    page.set_viewport_size({"width": 375, "height": 812})
+    page.goto(f"{flask_server}/f/test_finances/budget")
+
+    # Desktop bar is hidden; mobile trigger row is visible
+    assert page.locator(".sm\\:hidden").first.is_visible()
+    assert not page.locator(".sm\\:flex").first.is_visible()
+
+    # Expand the mobile filter panel
+    page.locator(".sm\\:hidden button.p-1").click()
+
+    # Open the Kind dropdown inside the mobile panel
+    page.locator(".sm\\:hidden .filter-dropdown-trigger:has-text('Kind')").click()
+
+    # Select income
+    page.locator(".sm\\:hidden input[name='include_kind'][value='income']").click()
+    page.wait_for_url("**/budget**include_kind**")
+
+    # Active count badge should appear in the mobile trigger row
+    assert page.locator(".sm\\:hidden .tabular-nums").is_visible()
+
+    # Correct rows shown
+    tbody = page.locator("#budget-tbody")
+    assert tbody.get_by_text("Salary", exact=True).first.is_visible()
     assert tbody.locator("tr").filter(has_text="Rent").count() == 0
 
 

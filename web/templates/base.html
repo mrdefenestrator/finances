@@ -191,7 +191,7 @@
         /* Scrollable table container: data rows scroll, header/footer rows stick */
         .table-scroll-container {
             overflow: auto;
-            max-height: calc(100dvh - var(--header-h) - 4.5rem);
+            max-height: calc(100dvh - var(--header-h) - var(--filter-h, 4.5rem));
         }
 
         .table-scroll-container thead {
@@ -441,6 +441,15 @@
             }
             updateHeaderH();
             window.addEventListener('resize', updateHeaderH);
+        })();
+        (function () {
+            var ff = document.querySelector('[id$="-filter-form"]');
+            if (!ff) return;
+            function updateFilterH() {
+                document.documentElement.style.setProperty('--filter-h', ff.offsetHeight + 'px');
+            }
+            updateFilterH();
+            new ResizeObserver(updateFilterH).observe(ff);
         })();
     </script>
 </body>

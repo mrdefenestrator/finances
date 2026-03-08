@@ -193,15 +193,42 @@ def test_filter_by_type(page, flask_server):
     page.goto(f"{flask_server}/f/test_finances/accounts")
 
     # Open type filter dropdown
-    page.locator("button.filter-dropdown-trigger:has-text('Type')").first.click()
+    page.locator(".sm\\:flex button.filter-dropdown-trigger:has-text('Type')").click()
 
     # Check credit_card (checkbox is inside the dropdown panel next to the trigger)
-    page.locator("input[name='include_type'][value='credit_card']").click()
+    page.locator(".sm\\:flex input[name='include_type'][value='credit_card']").click()
 
     # Wait for page reload
     page.wait_for_url("**/accounts**include_type**")
 
     # Should show only the credit card
+    assert page.locator("#accounts-tbody").get_by_text("Rewards Card").is_visible()
+    assert page.locator("#accounts-tbody").get_by_text("Main Checking").count() == 0
+
+
+def test_filter_by_type_mobile(page, flask_server):
+    """On a mobile viewport, the mobile filter panel toggle opens filters that work."""
+    page.set_viewport_size({"width": 375, "height": 812})
+    page.goto(f"{flask_server}/f/test_finances/accounts")
+
+    # Desktop bar is hidden; mobile trigger row is visible
+    assert page.locator(".sm\\:hidden").first.is_visible()
+    assert not page.locator(".sm\\:flex").first.is_visible()
+
+    # Expand the mobile filter panel
+    page.locator(".sm\\:hidden button.p-1").click()
+
+    # Filter panel should now be visible — open the Type dropdown inside it
+    page.locator(".sm\\:hidden .filter-dropdown-trigger:has-text('Type')").click()
+
+    # Select credit_card
+    page.locator(".sm\\:hidden input[name='include_type'][value='credit_card']").click()
+    page.wait_for_url("**/accounts**include_type**")
+
+    # Active count badge should appear in the mobile trigger row
+    assert page.locator(".sm\\:hidden .tabular-nums").is_visible()
+
+    # Correct rows shown
     assert page.locator("#accounts-tbody").get_by_text("Rewards Card").is_visible()
     assert page.locator("#accounts-tbody").get_by_text("Main Checking").count() == 0
 

@@ -160,10 +160,38 @@ def test_assets_filter_by_kind(page, flask_server):
     """Filtering by kind shows only matching entries."""
     page.goto(f"{flask_server}/f/test_finances/assets")
 
-    page.locator("button.filter-dropdown-trigger:has-text('Kind')").click()
-    page.locator("input[name='include_kind'][value='debt']").click()
+    page.locator(".sm\\:flex button.filter-dropdown-trigger:has-text('Kind')").click()
+    page.locator(".sm\\:flex input[name='include_kind'][value='debt']").click()
     page.wait_for_url("**/assets**include_kind**")
 
+    tbody = page.locator("#assets-tbody")
+    assert tbody.get_by_text("Mortgage", exact=True).first.is_visible()
+    assert tbody.locator("tr").filter(has_text="Primary Residence").count() == 0
+
+
+def test_assets_filter_by_kind_mobile(page, flask_server):
+    """On a mobile viewport, the mobile filter panel toggle opens filters that work."""
+    page.set_viewport_size({"width": 375, "height": 812})
+    page.goto(f"{flask_server}/f/test_finances/assets")
+
+    # Desktop bar is hidden; mobile trigger row is visible
+    assert page.locator(".sm\\:hidden").first.is_visible()
+    assert not page.locator(".sm\\:flex").first.is_visible()
+
+    # Expand the mobile filter panel
+    page.locator(".sm\\:hidden button.p-1").click()
+
+    # Open the Kind dropdown inside the mobile panel
+    page.locator(".sm\\:hidden .filter-dropdown-trigger:has-text('Kind')").click()
+
+    # Select debt
+    page.locator(".sm\\:hidden input[name='include_kind'][value='debt']").click()
+    page.wait_for_url("**/assets**include_kind**")
+
+    # Active count badge should appear in the mobile trigger row
+    assert page.locator(".sm\\:hidden .tabular-nums").is_visible()
+
+    # Correct rows shown
     tbody = page.locator("#assets-tbody")
     assert tbody.get_by_text("Mortgage", exact=True).first.is_visible()
     assert tbody.locator("tr").filter(has_text="Primary Residence").count() == 0
