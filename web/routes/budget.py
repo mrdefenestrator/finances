@@ -124,7 +124,7 @@ def budget_view(filename: str):
         for i in range(len(budget))
     ]
     ctx["include_kinds"] = [k for k in BUDGET_KINDS if k in include_kinds_set]
-    ctx["include_types"] = include_types or []
+    ctx["include_types"] = [t for t in BUDGET_ALL_TYPES if t in set(include_types)]
     ctx["include_recurrence"] = [
         r for r in RECURRENCE_OPTIONS if r in set(include_recurrence)
     ]

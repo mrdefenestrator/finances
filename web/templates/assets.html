@@ -7,23 +7,23 @@
     <div class="bg-white dark:bg-gray-800 rounded-t-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
 
         <!-- Mobile: compact trigger row -->
-        <div class="sm:hidden flex items-center gap-2 px-2 py-1.5">
-            <svg class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2a1 1 0 01-.293.707L13 13.414V19a1 1 0 01-.553.894l-4 2A1 1 0 017 21v-7.586L3.293 6.707A1 1 0 013 6V4z" />
-            </svg>
-            <span class="font-medium text-gray-700 dark:text-gray-200">Filters</span>
-            {% if _active_count > 0 %}
-            <span class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full px-1.5 py-0.5 tabular-nums">{{ _active_count }}</span>
-            {% endif %}
-            <div class="ml-auto flex items-center gap-1">
-                <a href="{{ url_for('assets.assets_view', filename=filename, edit=1 if edit_mode else none) }}"
-                    class="px-2 py-1 rounded border border-gray-200 dark:border-gray-600 text-xs bg-gray-50 dark:bg-gray-700 hover:bg-gray-100 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200">Reset</a>
-                <button type="button" @click="open = !open" class="p-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500 dark:text-gray-400">
-                    <svg class="w-4 h-4 transition-transform duration-150" :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-                    </svg>
-                </button>
-            </div>
+        <div class="sm:hidden flex items-center">
+            <button type="button" @click="open = !open"
+                class="flex-1 flex items-center gap-2 px-2 py-2 text-left min-w-0">
+                <svg class="w-4 h-4 shrink-0 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M7 12h10M10 18h4" />
+                </svg>
+                <span class="font-medium text-gray-700 dark:text-gray-200">Filters</span>
+                {% if _active_count > 0 %}
+                <span class="bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 text-xs font-medium rounded-full px-1.5 py-0.5 tabular-nums">{{ _active_count }}</span>
+                {% endif %}
+                <svg class="w-4 h-4 ml-auto shrink-0 transition-transform duration-150 text-gray-400 dark:text-gray-500"
+                    :class="{ 'rotate-180': open }" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                </svg>
+            </button>
+            <a href="{{ url_for('assets.assets_view', filename=filename, edit=1 if edit_mode else none) }}"
+                class="shrink-0 px-2 py-2 border-l border-gray-200 dark:border-gray-700 text-xs text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200">Reset</a>
         </div>
 
         <!-- Mobile: filter panel -->
@@ -43,6 +43,7 @@
                         {% for k in assets_kinds %}
                         <label class="flex items-center px-3 py-2 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer">
                             <input type="checkbox" name="include_kind" value="{{ k }}" {% if k in include_kinds %}checked{% endif %}
+                                :disabled="!open"
                                 onchange="document.getElementById('assets-filter-form').submit()"
                                 class="mr-2 rounded border-gray-300 dark:border-gray-600 text-blue-600 focus:ring-blue-500">
                             <span class="text-sm">{{ k | capitalize }}</span>

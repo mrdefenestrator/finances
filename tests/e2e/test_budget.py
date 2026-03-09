@@ -183,7 +183,7 @@ def test_budget_filter_by_kind_mobile(page, flask_server):
     assert not page.locator(".sm\\:flex").first.is_visible()
 
     # Expand the mobile filter panel
-    page.locator(".sm\\:hidden button.p-1").click()
+    page.locator(".sm\\:hidden > button[type=button]").click()
 
     # Open the Kind dropdown inside the mobile panel
     page.locator(".sm\\:hidden .filter-dropdown-trigger:has-text('Kind')").click()

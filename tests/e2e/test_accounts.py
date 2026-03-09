@@ -216,7 +216,7 @@ def test_filter_by_type_mobile(page, flask_server):
     assert not page.locator(".sm\\:flex").first.is_visible()
 
     # Expand the mobile filter panel
-    page.locator(".sm\\:hidden button.p-1").click()
+    page.locator(".sm\\:hidden > button[type=button]").click()
 
     # Filter panel should now be visible — open the Type dropdown inside it
     page.locator(".sm\\:hidden .filter-dropdown-trigger:has-text('Type')").click()
