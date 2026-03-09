@@ -33,10 +33,6 @@
         htmx.config.defaultSwapStyle = 'innerHTML';
     </script>
     <style>
-        :root {
-            --header-h: 52px;
-        }
-
         /* Hide Alpine-controlled elements until Alpine initializes (prevents flash) */
         [x-cloak] { display: none !important; }
 
@@ -191,7 +187,8 @@
         /* Scrollable table container: data rows scroll, header/footer rows stick */
         .table-scroll-container {
             overflow: auto;
-            max-height: calc(100dvh - var(--header-h) - var(--filter-h, 4.5rem));
+            flex: 1 1 0;
+            min-height: 0;
         }
 
         .table-scroll-container thead {
@@ -216,7 +213,7 @@
     </style>
 </head>
 
-<body class="h-full bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
+<body class="h-full flex flex-col overflow-hidden bg-gray-50 dark:bg-gray-900 dark:text-gray-100">
     <header id="main-header" class="bg-blue-800 text-white shadow sticky top-0 z-50">
         <!-- Row 1: title + controls -->
         <div class="flex items-center px-4">
@@ -428,30 +425,11 @@
         {% endif %}
     </header>
 
-    <main class="px-4 py-4">
+    <main class="flex-1 min-h-0 flex flex-col px-4 py-4">
         {% block content %}{% endblock %}
     </main>
 
     <script src="{{ url_for('static', filename='js/sortable.js') }}"></script>
-    <script>
-        (function () {
-            var hdr = document.getElementById('main-header');
-            function updateHeaderH() {
-                document.documentElement.style.setProperty('--header-h', hdr.offsetHeight + 'px');
-            }
-            updateHeaderH();
-            window.addEventListener('resize', updateHeaderH);
-        })();
-        (function () {
-            var ff = document.querySelector('[id$="-filter-form"]');
-            if (!ff) return;
-            function updateFilterH() {
-                document.documentElement.style.setProperty('--filter-h', ff.offsetHeight + 'px');
-            }
-            updateFilterH();
-            new ResizeObserver(updateFilterH).observe(ff);
-        })();
-    </script>
 </body>
 
 </html>

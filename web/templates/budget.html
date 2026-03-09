@@ -5,7 +5,7 @@
 {% set _types_active = (include_types | length) if (include_types and include_types | length < budget_all_types | length) else 0 %}
 {% set _rec_active = (include_recurrence | length) if (include_recurrence and include_recurrence | length < recurrence_options | length) else 0 %}
 {% set _active_count = _kinds_active + _types_active + _rec_active %}
-<form id="budget-filter-form" method="get" action="{{ url_for('budget.budget_view', filename=filename) }}" class="sticky top-[var(--header-h)] z-40" x-data="{ open: false }">
+<form id="budget-filter-form" method="get" action="{{ url_for('budget.budget_view', filename=filename) }}" class="shrink-0 relative z-20" x-data="{ open: false }">
     {% if edit_mode %}<input type="hidden" name="edit" value="1">{% endif %}
     <div class="bg-white dark:bg-gray-800 rounded-t-lg border border-gray-300 dark:border-gray-600 text-sm text-gray-600 dark:text-gray-300">
 
