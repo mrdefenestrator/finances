@@ -231,6 +231,7 @@
 
             <div class="flex items-center ml-auto gap-2 shrink-0">
             <!-- Lock/Unlock edit mode -->
+            {% if filename %}
             <form method="POST" action="{{ url_for('edit_mode.toggle') }}" class="flex items-center py-2">
                 {% if edit_mode %}
                 <button type="submit" title="Exit edit mode"
@@ -252,6 +253,7 @@
                 </button>
                 {% endif %}
             </form>
+            {% endif %}
 
             <!-- Theme toggle -->
             <div x-data="{
@@ -284,7 +286,7 @@
 
             <!-- File picker dropdown (right side) -->
             <div x-data="{
-                open: false,
+                open: {{ 'true' if not filename else 'false' }},
                 mode: 'list',
                 inputName: '',
                 resetMode() { this.mode = 'list'; this.inputName = ''; }
@@ -302,7 +304,7 @@
                 </button>
 
                 <div x-show="open" style="display:none" @click.outside="open = false" x-cloak data-file-picker-dropdown
-                    class="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-[60] text-sm">
+                    class="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-[60] text-sm overflow-hidden">
 
                     <!-- File list mode -->
                     <template x-if="mode === 'list'">
@@ -388,7 +390,7 @@
                                         :name="mode === 'rename' ? 'new_name' : 'name'"
                                         type="text" placeholder="filename"
                                         @keydown.escape="resetMode()"
-                                        class="flex-1 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400">
+                                        class="flex-1 min-w-0 px-2 py-1 border border-gray-300 dark:border-gray-600 rounded text-sm bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100 focus:outline-none focus:border-blue-500 dark:focus:border-blue-400">
                                     <button type="submit"
                                         class="px-3 py-1 bg-blue-600 text-white text-sm rounded hover:bg-blue-700"
                                         x-text="mode === 'rename' ? 'Save' : 'Create'"></button>

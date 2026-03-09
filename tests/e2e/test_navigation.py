@@ -6,10 +6,10 @@ pytestmark = pytest.mark.e2e
 
 
 def test_root_shows_file_selection(page, flask_server):
-    """Root URL shows the file selection page."""
+    """Root URL shows the file selection page with picker auto-opened."""
     page.goto(flask_server)
     assert page.url.rstrip("/") == flask_server.rstrip("/")
-    assert page.locator("h1, h2").first.is_visible()
+    assert page.locator("[data-file-picker-dropdown]").is_visible()
 
 
 def test_nav_links(page, flask_server):
