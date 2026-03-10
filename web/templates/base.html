@@ -210,6 +210,9 @@
             bottom: 0;
             z-index: 5;
         }
+        /* File picker row: reveal action buttons on hover */
+        .file-row-actions { opacity: 0; pointer-events: none; transition: opacity 0.1s ease; }
+        .file-row:hover .file-row-actions { opacity: 1; pointer-events: auto; }
     </style>
 </head>
 
@@ -281,6 +284,7 @@
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/>
                     </svg>
+                    <span x-text="theme" class="hidden sm:inline capitalize"></span>
                 </button>
             </div>
 
@@ -291,80 +295,76 @@
                 inputName: '',
                 resetMode() { this.mode = 'list'; this.inputName = ''; }
             }" class="relative py-3 shrink-0">
-                <button @click="open = !open; if(open) resetMode()" data-file-picker
+                <button @click.stop="open = !open; if(open) resetMode()" data-file-picker
                     class="flex items-center gap-1 text-sm text-blue-100 hover:text-white transition-colors">
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <svg class="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                             d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
                     </svg>
-                    <span>{{ filename }}</span>
-                    <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {% if filename %}<span class="hidden sm:inline truncate max-w-[10rem]">{{ filename }}</span>{% endif %}
+                    <svg class="w-3 h-3 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
                     </svg>
                 </button>
 
-                <div x-show="open" style="display:none" @click.outside="open = false" x-cloak data-file-picker-dropdown
-                    class="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-[60] text-sm overflow-hidden">
+                <div x-init="$el.style.removeProperty('display')" :class="open ? '' : 'opacity-0 pointer-events-none'" style="display:none" @click.outside="open = false" data-file-picker-dropdown
+                    class="absolute right-0 top-full mt-1 w-64 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-100 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 z-[60] text-sm overflow-hidden transition-opacity duration-100">
 
                     <!-- File list mode -->
                     <template x-if="mode === 'list'">
-                        <div>
-                            <div class="p-2 border-b border-gray-100 dark:border-gray-700">
-                                <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide px-1 mb-1">Files</div>
-                                {% for f in available_files %}
-                                <div class="flex items-center group">
-                                    {% if f == filename %}
-                                    <div class="flex-1 px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium flex items-center justify-between">
-                                        <span class="truncate">{{ f }}</span>
-                                        <span class="text-xs text-blue-400 ml-1 shrink-0">active</span>
-                                    </div>
-                                    {% else %}
-                                    <a href="{% if active_tab is defined and active_tab == 'budget' %}{{ url_for('budget.budget_view', filename=f, edit=1 if edit_mode else none) }}{% elif active_tab is defined and active_tab == 'assets' %}{{ url_for('assets.assets_view', filename=f, edit=1 if edit_mode else none) }}{% else %}{{ url_for('accounts.accounts_view', filename=f, edit=1 if edit_mode else none) }}{% endif %}"
-                                        class="flex-1 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 truncate text-gray-700 dark:text-gray-200">
-                                        {{ f }}
-                                    </a>
-                                    <form method="POST" action="{{ url_for('files.delete') }}"
-                                        class="opacity-0 group-hover:opacity-100 shrink-0">
-                                        <input type="hidden" name="name" value="{{ f }}.yaml">
-                                        <button type="submit" title="Delete {{ f }}.yaml"
-                                            class="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
-                                            onclick="return confirm('Delete {{ f }}?')">
+                        <div class="p-2">
+                            <div class="text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wide px-1 mb-1">Files</div>
+                            {% for f in available_files %}
+                            <div class="flex items-center file-row">
+                                {% if f == filename %}
+                                <div class="flex-1 px-2 py-1 rounded bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium flex items-center justify-between min-w-0" data-active-file>
+                                    <span class="truncate">{{ f }}</span>
+                                    <div class="flex items-center gap-0.5 shrink-0 ml-1">
+                                        <button @click="mode = 'rename'; inputName = '{{ filename }}'; $nextTick(() => { $refs.nameInput.focus(); $refs.nameInput.select(); })"
+                                            title="Rename" aria-label="Rename"
+                                            class="p-1 text-blue-400 hover:text-blue-600 dark:hover:text-blue-200">
                                             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                                    d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
                                             </svg>
                                         </button>
-                                    </form>
-                                    {% endif %}
+                                        <button @click="mode = 'copy'; inputName = '{{ filename }}-copy'; $nextTick(() => { $refs.nameInput.focus(); $refs.nameInput.select(); })"
+                                            title="Duplicate" aria-label="Duplicate"
+                                            class="p-1 text-blue-400 hover:text-blue-600 dark:hover:text-blue-200">
+                                            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                    d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                                            </svg>
+                                        </button>
+                                    </div>
                                 </div>
-                                {% endfor %}
+                                {% else %}
+                                <a href="{% if active_tab is defined and active_tab == 'budget' %}{{ url_for('budget.budget_view', filename=f, edit=1 if edit_mode else none) }}{% elif active_tab is defined and active_tab == 'assets' %}{{ url_for('assets.assets_view', filename=f, edit=1 if edit_mode else none) }}{% else %}{{ url_for('accounts.accounts_view', filename=f, edit=1 if edit_mode else none) }}{% endif %}"
+                                    class="flex-1 px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 truncate text-gray-700 dark:text-gray-200">
+                                    {{ f }}
+                                </a>
+                                <form method="POST" action="{{ url_for('files.delete') }}"
+                                    class="shrink-0 file-row-actions">
+                                    <input type="hidden" name="name" value="{{ f }}.yaml">
+                                    <button type="submit" title="Delete {{ f }}.yaml"
+                                        class="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
+                                        onclick="return confirm('Delete {{ f }}?')">
+                                        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                                        </svg>
+                                    </button>
+                                </form>
+                                {% endif %}
                             </div>
-
-                            <div class="p-2 flex flex-col gap-1">
-                                <button @click="mode = 'new'; $nextTick(() => $refs.nameInput.focus())"
-                                    class="w-full text-left px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
-                                    </svg>
-                                    New file
-                                </button>
-                                <button @click="mode = 'copy'; inputName = '{{ filename }}-copy'; $nextTick(() => { $refs.nameInput.focus(); $refs.nameInput.select(); })"
-                                    class="w-full text-left px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
-                                    </svg>
-                                    Duplicate
-                                </button>
-                                <button @click="mode = 'rename'; inputName = '{{ filename }}'; $nextTick(() => { $refs.nameInput.focus(); $refs.nameInput.select(); })"
-                                    class="w-full text-left px-2 py-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-600 dark:text-gray-300">
-                                    <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                            d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z"/>
-                                    </svg>
-                                    Rename
-                                </button>
-                            </div>
+                            {% endfor %}
+                            <button @click="mode = 'new'; $nextTick(() => $refs.nameInput.focus())"
+                                class="w-full text-left px-2 py-1 mt-1 rounded hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2 text-gray-500 dark:text-gray-400">
+                                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                                </svg>
+                                New file
+                            </button>
                         </div>
                     </template>
 
