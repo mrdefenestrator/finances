@@ -12,6 +12,7 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import finances
+from finances.db import init_db, init_engine
 
 # Handle both direct execution (./web/app.py) and module import (from web.app import app)
 try:
@@ -33,7 +34,13 @@ except ImportError:
         edit_mode_bp,
     )
 
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+_db_path = os.environ.get("FINANCES_DB") or str(PROJECT_ROOT / "finances.db")
+
 app = Flask(__name__)
+_engine = init_engine(_db_path)
+init_db(_engine)
+app.config["DB_ENGINE"] = _engine
 
 
 def _display_is_negative(value):

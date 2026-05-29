@@ -126,15 +126,16 @@ def handle_update(
     )
 
 
-def handle_delete(writer_fn, path):
+def handle_delete(writer_fn, engine):
     """Generic delete handler.
 
     Args:
-        writer_fn: callable(path) -> None, may raise ValueError
-        path: Path to YAML file
+        writer_fn: callable(conn) -> None, may raise ValueError
+        engine: SQLAlchemy Engine
     """
     try:
-        writer_fn(path)
+        with engine.connect() as conn:
+            writer_fn(conn)
     except ValueError:
         return "", 422
     resp = current_app.make_response("")
@@ -142,18 +143,19 @@ def handle_delete(writer_fn, path):
     return resp
 
 
-def handle_move(writer_fn, path):
+def handle_move(writer_fn, engine):
     """Generic move handler.
 
     Args:
-        writer_fn: callable(path, direction) -> None, may raise ValueError
-        path: Path to YAML file
+        writer_fn: callable(conn, direction) -> None, may raise ValueError
+        engine: SQLAlchemy Engine
     """
     direction = request.args.get("direction", "up").lower()
     if direction not in ("up", "down"):
         return "", 422
     try:
-        writer_fn(path, direction)
+        with engine.connect() as conn:
+            writer_fn(conn, direction)
     except ValueError:
         return "", 422
     resp = current_app.make_response("")
