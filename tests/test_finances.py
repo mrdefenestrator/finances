@@ -436,17 +436,26 @@ def test_projected_change_to_eom_day_none_other_month_uses_zero():
     assert result == 600
 
 
-def test_status_command_exits_zero():
+def test_status_command_exits_zero(tmp_path):
     """Status command runs and exits 0 (smoke test)."""
-    from finances import main
-
-    path = Path(__file__).parent / "fixtures" / "test_finances.yaml"
-    # Simulate: finances.py <path> status
     import sys
+
+    from sqlalchemy import create_engine
+
+    from finances import main
+    from finances.db import init_db
+    from finances.yaml_import import import_yaml
+
+    db_path = tmp_path / "test.db"
+    engine = create_engine(f"sqlite:///{db_path}", future=True)
+    init_db(engine)
+    fixture = Path(__file__).parent / "fixtures" / "test_finances.yaml"
+    with engine.connect() as conn:
+        import_yaml(conn, fixture, name="test_finances")
 
     orig_argv = sys.argv
     try:
-        sys.argv = ["finances.py", str(path), "status"]
+        sys.argv = ["finances.py", "--db", str(db_path), "test_finances", "status"]
         assert main() == 0
     finally:
         sys.argv = orig_argv

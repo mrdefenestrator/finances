@@ -1,6 +1,7 @@
 """CLI for finances tracker."""
 
 import argparse
+import os
 import sys
 from datetime import date
 from pathlib import Path
@@ -15,13 +16,18 @@ from .calculations import (
     net_nonliquid_total,
     projected_change_to_eom,
 )
+from .db import init_db, init_engine
 from .filters import (
     apply_budget_filters,
     filter_accounts_by_type,
     filter_assets_by_kind,
 )
 from .formatting import fmt_money
-from .loader import load_finances
+from .loader import load_finances_from_db
+from .repository import accounts as repo_accounts
+from .repository import assets as repo_assets
+from .repository import budget as repo_budget
+from .repository.snapshots import get_snapshot_id, list_snapshots
 from .tables import (
     _account_display_by_id,
     _append_table_separator_and_total,
@@ -29,17 +35,6 @@ from .tables import (
     _build_budget_table,
     _build_funding_table,
     _build_net_worth_table,
-)
-from .writer import (
-    add_account as writer_add_account,
-    add_asset_entry as writer_add_asset_entry,
-    add_budget_entry as writer_add_budget_entry,
-    delete_account as writer_delete_account,
-    delete_asset_entry as writer_delete_asset_entry,
-    delete_budget_entry as writer_delete_budget_entry,
-    update_account as writer_update_account,
-    update_asset_entry as writer_update_asset_entry,
-    update_budget_entry as writer_update_budget_entry,
 )
 
 
@@ -70,8 +65,8 @@ def _sort_items(
 
 
 def cmd_status(args: argparse.Namespace) -> int:
-    """Show current financial status for the data file."""
-    data = load_finances(args.data_file)
+    """Show current financial status."""
+    data = load_finances_from_db(args.conn, args.snapshot_id)
 
     accounts = data.get("accounts") or []
     budget = data.get("budget") or []
@@ -115,7 +110,7 @@ def cmd_accounts(args: argparse.Namespace) -> int:
     if cmd == "delete":
         return _cmd_accounts_delete(args)
     # Default: list
-    data = load_finances(args.data_file)
+    data = load_finances_from_db(args.conn, args.snapshot_id)
     accounts = data.get("accounts") or []
     if not accounts:
         return 0
@@ -181,7 +176,7 @@ def _cmd_accounts_add(args: argparse.Namespace) -> int:
         if val is not None:
             account[key] = val
     try:
-        new_id = writer_add_account(args.data_file, account)
+        new_id = repo_accounts.add_account(args.conn, args.snapshot_id, account)
         print(f"Added account id {new_id}: {args.name}")
         return 0
     except ValueError as e:
@@ -213,7 +208,7 @@ def _cmd_accounts_edit(args: argparse.Namespace) -> int:
         print("Error: specify at least one field to update", file=sys.stderr)
         return 1
     try:
-        writer_update_account(args.data_file, args.id, updates)
+        repo_accounts.update_account(args.conn, args.snapshot_id, args.id, updates)
         print(f"Updated account id {args.id}")
         return 0
     except ValueError as e:
@@ -222,10 +217,9 @@ def _cmd_accounts_edit(args: argparse.Namespace) -> int:
 
 
 def _cmd_accounts_delete(args: argparse.Namespace) -> int:
-    """Delete account by id. --dry-run: show what would be removed. --force: skip confirm."""
-    path = args.data_file
+    """Delete account by id. --dry-run: show what would be removed."""
     if getattr(args, "dry_run", False):
-        data = load_finances(path)
+        data = load_finances_from_db(args.conn, args.snapshot_id)
         accounts = data.get("accounts") or []
         acc = next((a for a in accounts if a.get("id") == args.id), None)
         if not acc:
@@ -234,7 +228,7 @@ def _cmd_accounts_delete(args: argparse.Namespace) -> int:
         print(f"Would delete account id {args.id}: {acc.get('name', '?')}")
         return 0
     try:
-        writer_delete_account(path, args.id)
+        repo_accounts.delete_account(args.conn, args.snapshot_id, args.id)
         print(f"Deleted account id {args.id}")
         return 0
     except ValueError as e:
@@ -297,7 +291,9 @@ def cmd_income(args: argparse.Namespace) -> int:
     cmd = getattr(args, "income_command", None)
     if cmd == "add":
         try:
-            writer_add_budget_entry(args.data_file, _build_income_entry(args))
+            repo_budget.add_budget_entry(
+                args.conn, args.snapshot_id, _build_income_entry(args)
+            )
             print(f"Added income: {args.description}")
             return 0
         except ValueError as e:
@@ -323,8 +319,7 @@ def cmd_income(args: argparse.Namespace) -> int:
         if not updates:
             print("Error: specify at least one field to update", file=sys.stderr)
             return 1
-        # Find global budget index for the nth income entry
-        data = load_finances(args.data_file)
+        data = load_finances_from_db(args.conn, args.snapshot_id)
         budget = data.get("budget") or []
         income_entries = [e for e in budget if e.get("kind") == "income"]
         if args.index < 0 or args.index >= len(income_entries):
@@ -332,14 +327,16 @@ def cmd_income(args: argparse.Namespace) -> int:
             return 1
         global_idx = budget.index(income_entries[args.index])
         try:
-            writer_update_budget_entry(args.data_file, global_idx, updates)
+            repo_budget.update_budget_entry(
+                args.conn, args.snapshot_id, global_idx, updates
+            )
             print(f"Updated income at index {args.index}")
             return 0
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
     if cmd == "delete":
-        data = load_finances(args.data_file)
+        data = load_finances_from_db(args.conn, args.snapshot_id)
         budget = data.get("budget") or []
         income_entries = [e for e in budget if e.get("kind") == "income"]
         if args.index < 0 or args.index >= len(income_entries):
@@ -352,14 +349,14 @@ def cmd_income(args: argparse.Namespace) -> int:
             )
             return 0
         try:
-            writer_delete_budget_entry(args.data_file, global_idx)
+            repo_budget.delete_budget_entry(args.conn, args.snapshot_id, global_idx)
             print(f"Deleted income at index {args.index}")
             return 0
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
     # List
-    data = load_finances(args.data_file)
+    data = load_finances_from_db(args.conn, args.snapshot_id)
     budget = data.get("budget") or []
     income = [e for e in budget if e.get("kind") == "income"]
 
@@ -415,7 +412,9 @@ def cmd_expenses(args: argparse.Namespace) -> int:
     cmd = getattr(args, "expenses_command", None)
     if cmd == "add":
         try:
-            writer_add_budget_entry(args.data_file, _build_expense_entry(args))
+            repo_budget.add_budget_entry(
+                args.conn, args.snapshot_id, _build_expense_entry(args)
+            )
             print(f"Added expense: {args.description}")
             return 0
         except ValueError as e:
@@ -441,8 +440,7 @@ def cmd_expenses(args: argparse.Namespace) -> int:
         if not updates:
             print("Error: specify at least one field to update", file=sys.stderr)
             return 1
-        # Find global budget index for the nth expense entry
-        data = load_finances(args.data_file)
+        data = load_finances_from_db(args.conn, args.snapshot_id)
         budget = data.get("budget") or []
         expense_entries = [e for e in budget if e.get("kind") == "expense"]
         if args.index < 0 or args.index >= len(expense_entries):
@@ -450,14 +448,16 @@ def cmd_expenses(args: argparse.Namespace) -> int:
             return 1
         global_idx = budget.index(expense_entries[args.index])
         try:
-            writer_update_budget_entry(args.data_file, global_idx, updates)
+            repo_budget.update_budget_entry(
+                args.conn, args.snapshot_id, global_idx, updates
+            )
             print(f"Updated expense at index {args.index}")
             return 0
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
     if cmd == "delete":
-        data = load_finances(args.data_file)
+        data = load_finances_from_db(args.conn, args.snapshot_id)
         budget = data.get("budget") or []
         expense_entries = [e for e in budget if e.get("kind") == "expense"]
         if args.index < 0 or args.index >= len(expense_entries):
@@ -470,14 +470,14 @@ def cmd_expenses(args: argparse.Namespace) -> int:
             )
             return 0
         try:
-            writer_delete_budget_entry(args.data_file, global_idx)
+            repo_budget.delete_budget_entry(args.conn, args.snapshot_id, global_idx)
             print(f"Deleted expense at index {args.index}")
             return 0
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
     # List
-    data = load_finances(args.data_file)
+    data = load_finances_from_db(args.conn, args.snapshot_id)
     budget = data.get("budget") or []
     expenses = [e for e in budget if e.get("kind") == "expense"]
 
@@ -530,7 +530,7 @@ def cmd_expenses(args: argparse.Namespace) -> int:
 
 def cmd_budget(args: argparse.Namespace) -> int:
     """Show income and expenses (budget) table. Optional filters by kind, type, recurrence."""
-    data = load_finances(args.data_file)
+    data = load_finances_from_db(args.conn, args.snapshot_id)
     accounts = data.get("accounts") or []
     budget = data.get("budget") or []
     if not budget:
@@ -601,7 +601,7 @@ def cmd_assets(args: argparse.Namespace) -> int:
         if getattr(args, "institution", None):
             asset["institution"] = args.institution
         try:
-            new_id = writer_add_asset_entry(args.data_file, asset)
+            new_id = repo_assets.add_asset_entry(args.conn, args.snapshot_id, asset)
             print(f"Added asset id {new_id}: {args.name}")
             return 0
         except ValueError as e:
@@ -616,7 +616,7 @@ def cmd_assets(args: argparse.Namespace) -> int:
         if not updates:
             print("Error: specify at least one field to update", file=sys.stderr)
             return 1
-        data = load_finances(args.data_file)
+        data = load_finances_from_db(args.conn, args.snapshot_id)
         all_entries = data.get("assets") or []
         asset_indexed = [
             (gi, e) for gi, e in enumerate(all_entries) if e.get("kind") == "asset"
@@ -626,14 +626,16 @@ def cmd_assets(args: argparse.Namespace) -> int:
             return 1
         global_index = asset_indexed[args.index][0]
         try:
-            writer_update_asset_entry(args.data_file, global_index, updates)
+            repo_assets.update_asset_entry(
+                args.conn, args.snapshot_id, global_index, updates
+            )
             print(f"Updated asset at index {args.index}")
             return 0
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
     if cmd == "delete":
-        data = load_finances(args.data_file)
+        data = load_finances_from_db(args.conn, args.snapshot_id)
         all_entries = data.get("assets") or []
         asset_indexed = [
             (gi, e) for gi, e in enumerate(all_entries) if e.get("kind") == "asset"
@@ -646,14 +648,14 @@ def cmd_assets(args: argparse.Namespace) -> int:
             print(f"Would delete asset at index {args.index}: {entry.get('name', '?')}")
             return 0
         try:
-            writer_delete_asset_entry(args.data_file, global_index)
+            repo_assets.delete_asset_entry(args.conn, args.snapshot_id, global_index)
             print(f"Deleted asset at index {args.index}")
             return 0
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
     # List
-    data = load_finances(args.data_file)
+    data = load_finances_from_db(args.conn, args.snapshot_id)
     all_entries = data.get("assets") or []
     if not all_entries:
         return 0
@@ -710,7 +712,7 @@ def cmd_debts(args: argparse.Namespace) -> int:
         if getattr(args, "institution", None):
             entry["institution"] = args.institution
         try:
-            writer_add_asset_entry(args.data_file, entry)
+            repo_assets.add_asset_entry(args.conn, args.snapshot_id, entry)
             print(f"Added debt: {args.name}")
             return 0
         except ValueError as e:
@@ -738,7 +740,7 @@ def cmd_debts(args: argparse.Namespace) -> int:
         if not updates:
             print("Error: specify at least one field to update", file=sys.stderr)
             return 1
-        data = load_finances(args.data_file)
+        data = load_finances_from_db(args.conn, args.snapshot_id)
         all_entries = data.get("assets") or []
         debt_indexed = [
             (gi, e) for gi, e in enumerate(all_entries) if e.get("kind") == "debt"
@@ -748,14 +750,16 @@ def cmd_debts(args: argparse.Namespace) -> int:
             return 1
         global_index = debt_indexed[args.index][0]
         try:
-            writer_update_asset_entry(args.data_file, global_index, updates)
+            repo_assets.update_asset_entry(
+                args.conn, args.snapshot_id, global_index, updates
+            )
             print(f"Updated debt at index {args.index}")
             return 0
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
     if cmd == "delete":
-        data = load_finances(args.data_file)
+        data = load_finances_from_db(args.conn, args.snapshot_id)
         all_entries = data.get("assets") or []
         debt_indexed = [
             (gi, e) for gi, e in enumerate(all_entries) if e.get("kind") == "debt"
@@ -768,14 +772,14 @@ def cmd_debts(args: argparse.Namespace) -> int:
             print(f"Would delete debt at index {args.index}: {entry.get('name', '?')}")
             return 0
         try:
-            writer_delete_asset_entry(args.data_file, global_index)
+            repo_assets.delete_asset_entry(args.conn, args.snapshot_id, global_index)
             print(f"Deleted debt at index {args.index}")
             return 0
         except ValueError as e:
             print(f"Error: {e}", file=sys.stderr)
             return 1
     # List
-    data = load_finances(args.data_file)
+    data = load_finances_from_db(args.conn, args.snapshot_id)
     all_entries = data.get("assets") or []
     debt_entries = [e for e in all_entries if e.get("kind") == "debt"]
     if not debt_entries:
@@ -816,7 +820,7 @@ def cmd_debts(args: argparse.Namespace) -> int:
 
 def cmd_funding(args: argparse.Namespace) -> int:
     """Show funding needed for each liquid account to cover CC statements, direct expenses, and reserve."""
-    data = load_finances(args.data_file)
+    data = load_finances_from_db(args.conn, args.snapshot_id)
     accounts = data.get("accounts") or []
     budget = data.get("budget") or []
     today = date.today()
@@ -865,9 +869,16 @@ def main() -> int:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
-        "data_file",
+        "--db",
         type=Path,
-        help="Path to finances YAML file",
+        default=None,
+        metavar="PATH",
+        help="Path to SQLite database (default: $FINANCES_DB or finances.db)",
+    )
+    parser.add_argument(
+        "snapshot",
+        type=str,
+        help="Snapshot name to operate on",
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
     prog = parser.prog
@@ -884,14 +895,14 @@ def main() -> int:
     status_parser = add_cmd_parser(
         "status",
         "Show current financial status for the data file",
-        epilog=f"examples:\n  {prog} data/finances.yaml status\n  {prog} data/example-finances.yaml status",
+        epilog=f"examples:\n  {prog} finances status\n  {prog} example status",
     )
     status_parser.set_defaults(func=cmd_status)
 
     accounts_parser = add_cmd_parser(
         "accounts",
         "Show accounts table, or add/edit/delete account (subcommands: add, edit, delete).",
-        epilog=f"examples:\n  {prog} data/finances.yaml accounts\n  {prog} data/finances.yaml accounts --sort name\n  {prog} data/finances.yaml accounts --show-id\n  {prog} data/finances.yaml accounts -i checking -i savings\n\nFor subcommand help, use: {prog} data/finances.yaml accounts <subcommand> -h",
+        epilog=f"examples:\n  {prog} finances accounts\n  {prog} finances accounts --sort name\n  {prog} finances accounts --show-id\n  {prog} finances accounts -i checking -i savings\n\nFor subcommand help, use: {prog} finances accounts <subcommand> -h",
     )
     accounts_parser.add_argument(
         "-i",
@@ -936,7 +947,7 @@ def main() -> int:
         "add",
         help="Add an account",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml accounts add --name Savings --type savings --balance 500\n  {prog} data/finances.yaml accounts add --name 'Chase Freedom' --type credit_card --limit 5000 --available 4800",
+        epilog=f"examples:\n  {prog} finances accounts add --name Savings --type savings --balance 500\n  {prog} finances accounts add --name 'Chase Freedom' --type credit_card --limit 5000 --available 4800",
     )
     add_p.add_argument("--name", required=True, help="Account name")
     add_p.add_argument(
@@ -976,7 +987,7 @@ def main() -> int:
         "edit",
         help="Edit account by id",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml accounts edit 1 --name 'Main Checking'\n  {prog} data/finances.yaml accounts edit 2 --balance 1250.50\n  {prog} data/finances.yaml accounts edit 3 --available 4500",
+        epilog=f"examples:\n  {prog} finances accounts edit 1 --name 'Main Checking'\n  {prog} finances accounts edit 2 --balance 1250.50\n  {prog} finances accounts edit 3 --available 4500",
     )
     edit_p.add_argument("id", type=int, help="Account id")
     edit_p.add_argument("--name", type=str, default=None)
@@ -1011,7 +1022,7 @@ def main() -> int:
         "delete",
         help="Delete account by id",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml accounts delete 2 --dry-run\n  {prog} data/finances.yaml accounts delete 2",
+        epilog=f"examples:\n  {prog} finances accounts delete 2 --dry-run\n  {prog} finances accounts delete 2",
     )
     del_p.add_argument("id", type=int, help="Account id")
     del_p.add_argument(
@@ -1025,7 +1036,7 @@ def main() -> int:
     budget_parser = add_cmd_parser(
         "budget",
         "Show income and expenses (budget) table with prorated subtotals and budget amounts. Optional filters by kind, type, recurrence.",
-        epilog=f"examples:\n  {prog} data/finances.yaml budget\n  {prog} data/finances.yaml budget --annual\n  {prog} data/finances.yaml budget --sort amount --sort-dir desc\n  {prog} data/finances.yaml budget --show-id\n  {prog} data/finances.yaml budget --kind income -i salary\n  {prog} data/finances.yaml budget -x insurance --exclude-recurrence one_time",
+        epilog=f"examples:\n  {prog} finances budget\n  {prog} finances budget --annual\n  {prog} finances budget --sort amount --sort-dir desc\n  {prog} finances budget --show-id\n  {prog} finances budget --kind income -i salary\n  {prog} finances budget -x insurance --exclude-recurrence one_time",
     )
     budget_parser.add_argument(
         "--annual",
@@ -1099,7 +1110,7 @@ def main() -> int:
     income_parser = add_cmd_parser(
         "income",
         "List income or add/edit/delete income entry (subcommands: add, edit, delete).",
-        epilog=f"examples:\n  {prog} data/finances.yaml income\n  {prog} data/finances.yaml income --annual\n  {prog} data/finances.yaml income --sort amount --sort-dir desc\n  {prog} data/finances.yaml income --show-id\n\nFor subcommand help, use: {prog} data/finances.yaml income <subcommand> -h",
+        epilog=f"examples:\n  {prog} finances income\n  {prog} finances income --annual\n  {prog} finances income --sort amount --sort-dir desc\n  {prog} finances income --show-id\n\nFor subcommand help, use: {prog} finances income <subcommand> -h",
     )
     income_parser.add_argument(
         "--annual",
@@ -1111,7 +1122,7 @@ def main() -> int:
         "add",
         help="Add income entry",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml income add --description Salary --amount 5000 --recurrence monthly --dayOfMonth 1\n  {prog} data/finances.yaml income add --description Bonus --amount 1000 --recurrence one_time --date 2026-12-15",
+        epilog=f"examples:\n  {prog} finances income add --description Salary --amount 5000 --recurrence monthly --dayOfMonth 1\n  {prog} finances income add --description Bonus --amount 1000 --recurrence one_time --date 2026-12-15",
     )
     income_add.add_argument("--description", required=True)
     income_add.add_argument("--amount", type=float, required=True)
@@ -1140,7 +1151,7 @@ def main() -> int:
         "edit",
         help="Edit income at index",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml income edit 0 --amount 6000\n  {prog} data/finances.yaml income edit 1 --description 'Updated salary'",
+        epilog=f"examples:\n  {prog} finances income edit 0 --amount 6000\n  {prog} finances income edit 1 --description 'Updated salary'",
     )
     income_edit.add_argument("index", type=int)
     income_edit.add_argument("--description", default=None)
@@ -1157,7 +1168,7 @@ def main() -> int:
         "delete",
         help="Delete income at index",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml income delete 0 --dry-run\n  {prog} data/finances.yaml income delete 0",
+        epilog=f"examples:\n  {prog} finances income delete 0 --dry-run\n  {prog} finances income delete 0",
     )
     income_del.add_argument("index", type=int)
     income_del.add_argument("--dry-run", action="store_true")
@@ -1186,7 +1197,7 @@ def main() -> int:
     expenses_parser = add_cmd_parser(
         "expenses",
         "List expenses or add/edit/delete expense entry (subcommands: add, edit, delete).",
-        epilog=f"examples:\n  {prog} data/finances.yaml expenses\n  {prog} data/finances.yaml expenses --annual\n  {prog} data/finances.yaml expenses --sort amount --sort-dir desc\n  {prog} data/finances.yaml expenses --show-id\n\nFor subcommand help, use: {prog} data/finances.yaml expenses <subcommand> -h",
+        epilog=f"examples:\n  {prog} finances expenses\n  {prog} finances expenses --annual\n  {prog} finances expenses --sort amount --sort-dir desc\n  {prog} finances expenses --show-id\n\nFor subcommand help, use: {prog} finances expenses <subcommand> -h",
     )
     expenses_parser.add_argument(
         "--annual",
@@ -1198,7 +1209,7 @@ def main() -> int:
         "add",
         help="Add expense entry",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml expenses add --description Rent --amount 1500 --recurrence monthly --dayOfMonth 1\n  {prog} data/finances.yaml expenses add --description 'Car repair' --amount 350 --recurrence one_time --date 2026-02-10",
+        epilog=f"examples:\n  {prog} finances expenses add --description Rent --amount 1500 --recurrence monthly --dayOfMonth 1\n  {prog} finances expenses add --description 'Car repair' --amount 350 --recurrence one_time --date 2026-02-10",
     )
     exp_add.add_argument("--description", required=True)
     exp_add.add_argument("--amount", type=float, required=True)
@@ -1237,7 +1248,7 @@ def main() -> int:
         "edit",
         help="Edit expense at index",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml expenses edit 0 --amount 1600\n  {prog} data/finances.yaml expenses edit 2 --description 'Updated rent'",
+        epilog=f"examples:\n  {prog} finances expenses edit 0 --amount 1600\n  {prog} finances expenses edit 2 --description 'Updated rent'",
     )
     exp_edit.add_argument("index", type=int)
     exp_edit.add_argument("--description", default=None)
@@ -1254,7 +1265,7 @@ def main() -> int:
         "delete",
         help="Delete expense at index",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml expenses delete 0 --dry-run\n  {prog} data/finances.yaml expenses delete 0",
+        epilog=f"examples:\n  {prog} finances expenses delete 0 --dry-run\n  {prog} finances expenses delete 0",
     )
     exp_del.add_argument("index", type=int)
     exp_del.add_argument("--dry-run", action="store_true")
@@ -1282,7 +1293,7 @@ def main() -> int:
     assets_parser = add_cmd_parser(
         "assets",
         "Show assets and debts table, or add/edit/delete asset (subcommands: add, edit, delete).",
-        epilog=f"examples:\n  {prog} data/finances.yaml assets\n  {prog} data/finances.yaml assets --sort value --sort-dir desc\n  {prog} data/finances.yaml assets --show-id\n  {prog} data/finances.yaml assets --kind asset\n\nFor subcommand help, use: {prog} data/finances.yaml assets <subcommand> -h",
+        epilog=f"examples:\n  {prog} finances assets\n  {prog} finances assets --sort value --sort-dir desc\n  {prog} finances assets --show-id\n  {prog} finances assets --kind asset\n\nFor subcommand help, use: {prog} finances assets <subcommand> -h",
     )
     assets_parser.add_argument(
         "--kind",
@@ -1316,7 +1327,7 @@ def main() -> int:
         "add",
         help="Add asset",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml assets add --name Car --value 25000\n  {prog} data/finances.yaml assets add --name 'AAPL Stock' --value 150 --quantity 10",
+        epilog=f"examples:\n  {prog} finances assets add --name Car --value 25000\n  {prog} finances assets add --name 'AAPL Stock' --value 150 --quantity 10",
     )
     ast_add.add_argument("--name", required=True)
     ast_add.add_argument("--value", type=float, required=True)
@@ -1327,7 +1338,7 @@ def main() -> int:
         "edit",
         help="Edit asset at index",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml assets edit 0 --value 24000\n  {prog} data/finances.yaml assets edit 1 --quantity 12",
+        epilog=f"examples:\n  {prog} finances assets edit 0 --value 24000\n  {prog} finances assets edit 1 --quantity 12",
     )
     ast_edit.add_argument("index", type=int)
     ast_edit.add_argument("--name", default=None)
@@ -1339,7 +1350,7 @@ def main() -> int:
         "delete",
         help="Delete asset at index",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml assets delete 1 --dry-run\n  {prog} data/finances.yaml assets delete 1",
+        epilog=f"examples:\n  {prog} finances assets delete 1 --dry-run\n  {prog} finances assets delete 1",
     )
     ast_del.add_argument("index", type=int)
     ast_del.add_argument("--dry-run", action="store_true")
@@ -1348,7 +1359,7 @@ def main() -> int:
     debts_parser = add_cmd_parser(
         "debts",
         "List debts or add/edit/delete debt (subcommands: add, edit, delete).",
-        epilog=f"examples:\n  {prog} data/finances.yaml debts\n  {prog} data/finances.yaml debts --sort balance --sort-dir desc\n  {prog} data/finances.yaml debts --show-id\n\nFor subcommand help, use: {prog} data/finances.yaml debts <subcommand> -h",
+        epilog=f"examples:\n  {prog} finances debts\n  {prog} finances debts --sort balance --sort-dir desc\n  {prog} finances debts --show-id\n\nFor subcommand help, use: {prog} finances debts <subcommand> -h",
     )
     debts_parser.add_argument(
         "--sort",
@@ -1374,7 +1385,7 @@ def main() -> int:
         "add",
         help="Add debt",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml debts add --name 'Car loan' --balance 15000\n  {prog} data/finances.yaml debts add --name Mortgage --balance 250000 --assetRef 0 --interestRate 0.035",
+        epilog=f"examples:\n  {prog} finances debts add --name 'Car loan' --balance 15000\n  {prog} finances debts add --name Mortgage --balance 250000 --assetRef 0 --interestRate 0.035",
     )
     dbt_add.add_argument("--name", required=True)
     dbt_add.add_argument("--balance", type=float, required=True)
@@ -1388,7 +1399,7 @@ def main() -> int:
         "edit",
         help="Edit debt at index",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml debts edit 0 --balance 14000\n  {prog} data/finances.yaml debts edit 1 --interestRate 0.04",
+        epilog=f"examples:\n  {prog} finances debts edit 0 --balance 14000\n  {prog} finances debts edit 1 --interestRate 0.04",
     )
     dbt_edit.add_argument("index", type=int)
     dbt_edit.add_argument("--name", default=None)
@@ -1403,7 +1414,7 @@ def main() -> int:
         "delete",
         help="Delete debt at index",
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog=f"examples:\n  {prog} data/finances.yaml debts delete 0 --dry-run\n  {prog} data/finances.yaml debts delete 0",
+        epilog=f"examples:\n  {prog} finances debts delete 0 --dry-run\n  {prog} finances debts delete 0",
     )
     dbt_del.add_argument("index", type=int)
     dbt_del.add_argument("--dry-run", action="store_true")
@@ -1412,7 +1423,7 @@ def main() -> int:
     funding_parser = add_cmd_parser(
         "funding",
         "Show funding needed for each liquid account (covers CC autopay, direct expenses, reserve).",
-        epilog=f"examples:\n  {prog} data/finances.yaml funding\n  {prog} data/finances.yaml funding --reserve 500\n  {prog} data/finances.yaml funding --account-id 1",
+        epilog=f"examples:\n  {prog} finances funding\n  {prog} finances funding --reserve 500\n  {prog} finances funding --account-id 1",
     )
     funding_parser.add_argument(
         "--reserve",
@@ -1431,7 +1442,25 @@ def main() -> int:
 
     args = parser.parse_args()
 
-    if not args.data_file.exists():
-        print(f"Error: File not found: {args.data_file}", file=sys.stderr)
-        return 1
-    return args.func(args)
+    db_path = args.db or os.environ.get("FINANCES_DB") or "finances.db"
+    engine = init_engine(db_path)
+    init_db(engine)
+
+    with engine.connect() as conn:
+        snapshot_id = get_snapshot_id(conn, args.snapshot)
+        if snapshot_id is None:
+            names = list_snapshots(conn)
+            if names:
+                print(
+                    f"Error: Snapshot '{args.snapshot}' not found. Available: {', '.join(names)}",
+                    file=sys.stderr,
+                )
+            else:
+                print(
+                    f"Error: Snapshot '{args.snapshot}' not found. Database is empty — run yaml_import first.",
+                    file=sys.stderr,
+                )
+            return 1
+        args.conn = conn
+        args.snapshot_id = snapshot_id
+        return args.func(args)

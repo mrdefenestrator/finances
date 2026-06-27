@@ -1,5 +1,6 @@
 """Account repository: CRUD + move for accounts within a snapshot."""
 
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import Connection, delete, insert, select, update
@@ -32,7 +33,7 @@ def _row_to_account(row) -> Account:
         if val is not None:
             acc[dst] = (
                 float(val)
-                if isinstance(val, (int, float))
+                if isinstance(val, (int, float, Decimal))
                 and src not in ("statement_due_day_of_month", "payment_account_ref")
                 else val
             )
