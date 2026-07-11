@@ -28,11 +28,6 @@ def validate_snapshot(filename: str) -> int:
     return snapshot_id
 
 
-# Keep the old name as an alias so any code path that still uses it gets a clear error
-def validate_url_filename(filename: str) -> int:
-    return validate_snapshot(filename)
-
-
 def get_default_filename() -> str:
     """Return the name of the first available snapshot, or ''."""
     engine = current_app.config["engine"]
