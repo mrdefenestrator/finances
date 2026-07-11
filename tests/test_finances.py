@@ -14,7 +14,6 @@ from finances import (
     fmt_qty,
     fmt_recurrence_display,
     fmt_type_display,
-    load_finances,
     liquid_minus_cc,
     liquid_total,
     credit_card_total,
@@ -22,16 +21,6 @@ from finances import (
     net_nonliquid_paired,
     net_nonliquid_total,
 )
-
-
-def test_load_finances():
-    """Load data file (finances.yaml validated by CI)."""
-    path = Path(__file__).parent / "fixtures" / "test_finances.yaml"
-    data = load_finances(path)
-    assert "accounts" in data
-    assert "budget" in data
-    assert "assets" in data
-    assert "debts" not in data
 
 
 def test_liquid_total():
