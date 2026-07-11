@@ -21,7 +21,7 @@ def _utcnow():
 
 
 snapshots = Table(
-    "snapshots",
+    "fin_snapshots",
     metadata,
     Column("id", Integer, primary_key=True),
     Column("name", String, unique=True, nullable=False),
@@ -29,7 +29,7 @@ snapshots = Table(
 )
 
 accounts = Table(
-    "accounts",
+    "fin_accounts",
     metadata,
     Column("id", Integer, primary_key=True),
     Column("snapshot_id", Integer, nullable=False),
@@ -51,7 +51,7 @@ accounts = Table(
 )
 
 budget_entries = Table(
-    "budget_entries",
+    "fin_budget_entries",
     metadata,
     Column("id", Integer, primary_key=True),
     Column("snapshot_id", Integer, nullable=False),
@@ -71,7 +71,7 @@ budget_entries = Table(
 )
 
 asset_entries = Table(
-    "asset_entries",
+    "fin_asset_entries",
     metadata,
     Column("id", Integer, primary_key=True),
     Column("snapshot_id", Integer, nullable=False),
