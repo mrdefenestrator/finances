@@ -18,13 +18,14 @@ def db_engine():
 @pytest.fixture()
 def client(db_engine):
     """Flask test client with an in-memory DB that has one 'finances' snapshot."""
-    from web.app import app
+    from web.app import create_app
 
     with db_engine.connect() as conn:
         create_snapshot(conn, "finances")
 
+    app = create_app(db_path=":memory:")
     app.config["TESTING"] = True
-    app.config["DB_ENGINE"] = db_engine
+    app.config["engine"] = db_engine
     with app.test_client() as c:
         yield c
 

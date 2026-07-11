@@ -20,7 +20,7 @@ def validate_snapshot(filename: str) -> int:
         abort(400, description="Invalid snapshot name")
     if not re.match(r"^[a-zA-Z0-9 _\-.]+$", filename):
         abort(400, description="Invalid snapshot name")
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         snapshot_id = get_snapshot_id(conn, filename)
     if snapshot_id is None:
@@ -35,7 +35,7 @@ def validate_url_filename(filename: str) -> int:
 
 def get_default_filename() -> str:
     """Return the name of the first available snapshot, or ''."""
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         names = list_snapshots(conn)
     return names[0] if names else ""
@@ -43,7 +43,7 @@ def get_default_filename() -> str:
 
 def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
     """Data and computed values shared by all views."""
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         data = load_finances_from_db(conn, snapshot_id)
         available_files = list_snapshots(conn)

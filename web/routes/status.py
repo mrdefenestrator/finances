@@ -9,7 +9,7 @@ status_bp = Blueprint("status", __name__)
 
 @status_bp.route("/")
 def status_view():
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         available_files = list_snapshots(conn)
     return render_template(

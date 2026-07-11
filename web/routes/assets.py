@@ -99,7 +99,7 @@ def assets_view(filename: str):
 @assets_bp.route("/<filename>/assets/delete-btn/<int:index>")
 def delete_btn(filename: str, index: int):
     snapshot_id = validate_snapshot(filename)
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         data = load_finances_from_db(conn, snapshot_id)
     asset_list = data.get("assets") or []
@@ -118,7 +118,7 @@ def delete_btn(filename: str, index: int):
 @assets_bp.route("/<filename>/assets/delete-confirm/<int:index>")
 def delete_confirm(filename: str, index: int):
     snapshot_id = validate_snapshot(filename)
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         data = load_finances_from_db(conn, snapshot_id)
     asset_list = data.get("assets") or []
@@ -136,7 +136,7 @@ def delete_confirm(filename: str, index: int):
 @assets_bp.route("/<filename>/assets/delete/<int:index>", methods=["POST"])
 def delete(filename: str, index: int):
     snapshot_id = validate_snapshot(filename)
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     return handle_delete(
         lambda conn: repo_assets.delete_asset_entry(conn, snapshot_id, index),
         engine,
@@ -146,7 +146,7 @@ def delete(filename: str, index: int):
 @assets_bp.route("/<filename>/assets/move/<int:index>", methods=["POST"])
 def move(filename: str, index: int):
     snapshot_id = validate_snapshot(filename)
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     return handle_move(
         lambda conn, d: repo_assets.move_asset_entry(conn, snapshot_id, index, d),
         engine,
@@ -199,7 +199,7 @@ def add(filename: str):
             entry["quantity"] = float(qty_raw)
         except ValueError:
             pass
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     try:
         with engine.connect() as conn:
             repo_assets.add_asset_entry(conn, snapshot_id, entry)
@@ -214,7 +214,7 @@ def add(filename: str):
 def cell_edit(filename: str, index: int):
     field = request.args.get("field", "name")
     snapshot_id = validate_snapshot(filename)
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         data = load_finances_from_db(conn, snapshot_id)
     asset_list = data.get("assets") or []
@@ -254,7 +254,7 @@ def update(filename: str, index: int):
     if error:
         return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         data = load_finances_from_db(conn, snapshot_id)
     asset_list = data.get("assets") or []

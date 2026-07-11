@@ -13,7 +13,7 @@ from typing import Any
 import yaml
 from sqlalchemy import Connection, insert, select, update
 
-from finances.db import init_db, init_engine
+from finances.db import get_engine, init_db
 from finances.models import accounts, asset_entries, budget_entries, snapshots
 
 
@@ -171,7 +171,7 @@ def main() -> int:
     )
     args = parser.parse_args()
 
-    engine = init_engine(args.db)
+    engine = get_engine(args.db)
     init_db(engine)
 
     paths: list[Path]

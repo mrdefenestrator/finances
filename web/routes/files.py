@@ -48,7 +48,7 @@ def new():
     except ValueError:
         abort(400, description="Invalid snapshot name")
 
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         if get_snapshot_id(conn, name) is not None:
             abort(409, description=f"Snapshot already exists: {name}")
@@ -65,7 +65,7 @@ def copy():
     except ValueError:
         abort(400, description="Invalid snapshot name")
 
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         from_id = get_snapshot_id(conn, source)
         if from_id is None:
@@ -85,7 +85,7 @@ def rename():
     except ValueError:
         abort(400, description="Invalid snapshot name")
 
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         snap_id = get_snapshot_id(conn, old_name)
         if snap_id is None:
@@ -99,7 +99,7 @@ def rename():
 @files_bp.route("/delete", methods=["POST"])
 def delete():
     name = request.form.get("name", "").strip()
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         snap_id = get_snapshot_id(conn, name)
         if snap_id is None:

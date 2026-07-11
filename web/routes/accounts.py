@@ -35,7 +35,7 @@ def _render_tbody(
     editing_field=None,
     editing_value=None,
 ):
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         data = load_finances_from_db(conn, snapshot_id)
     accs = data.get("accounts") or []
@@ -118,7 +118,7 @@ def accounts_view(filename: str):
 def cell_edit(filename: str, account_id: int):
     field = request.args.get("field", "name")
     snapshot_id = validate_snapshot(filename)
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     with engine.connect() as conn:
         data = load_finances_from_db(conn, snapshot_id)
     accs = data.get("accounts") or []
@@ -155,7 +155,7 @@ def update(filename: str, account_id: int):
     if not field:
         return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
 
     def _get_account():
         with engine.connect() as conn:
@@ -238,7 +238,7 @@ def add(filename: str):
         v = request.form.get(key, "").strip()
         if v:
             account[key] = v
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     try:
         with engine.connect() as conn:
             new_id = repo_accounts.add_account(conn, snapshot_id, account)
@@ -289,7 +289,7 @@ def delete_confirm(filename: str, account_id: int):
 @accounts_bp.route("/<filename>/accounts/delete/<int:account_id>", methods=["POST"])
 def delete(filename: str, account_id: int):
     snapshot_id = validate_snapshot(filename)
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     try:
         with engine.connect() as conn:
             repo_accounts.delete_account(conn, snapshot_id, account_id)
@@ -301,7 +301,7 @@ def delete(filename: str, account_id: int):
 @accounts_bp.route("/<filename>/accounts/move/<int:account_id>", methods=["POST"])
 def move(filename: str, account_id: int):
     snapshot_id = validate_snapshot(filename)
-    engine = current_app.config["DB_ENGINE"]
+    engine = current_app.config["engine"]
     return handle_move(
         lambda conn, d: repo_accounts.move_account(conn, snapshot_id, account_id, d),
         engine,

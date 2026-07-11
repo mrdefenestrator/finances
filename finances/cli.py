@@ -16,7 +16,7 @@ from .calculations import (
     net_nonliquid_total,
     projected_change_to_eom,
 )
-from .db import init_db, init_engine
+from .db import get_engine, init_db
 from .filters import (
     apply_budget_filters,
     filter_accounts_by_type,
@@ -1443,7 +1443,7 @@ def main() -> int:
     args = parser.parse_args()
 
     db_path = args.db or os.environ.get("FINANCES_DB") or "finances.db"
-    engine = init_engine(db_path)
+    engine = get_engine(db_path)
     init_db(engine)
 
     with engine.connect() as conn:
