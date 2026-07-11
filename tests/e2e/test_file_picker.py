@@ -184,7 +184,9 @@ def test_file_picker_delete_non_active(page, flask_server):
     page.locator("[data-file-picker-dropdown]").wait_for(state="visible")
 
     # Hover the row to reveal the delete button, then click it
-    non_active_link = page.locator("[data-file-picker-dropdown] a").filter(has_text="e2e-to-delete")
+    non_active_link = page.locator("[data-file-picker-dropdown] a").filter(
+        has_text="e2e-to-delete"
+    )
     non_active_link.hover()
     delete_btn = page.locator("button[title='Delete e2e-to-delete.yaml']")
     delete_btn.wait_for(state="visible")
