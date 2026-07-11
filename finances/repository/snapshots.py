@@ -29,8 +29,8 @@ def rename_snapshot(conn: Connection, snapshot_id: int, new_name: str) -> None:
 
 
 def delete_snapshot(conn: Connection, snapshot_id: int) -> None:
-    for table in (accounts, budget_entries, asset_entries):
-        conn.execute(delete(table).where(table.c.snapshot_id == snapshot_id))
+    # Child rows (accounts, budget_entries, asset_entries) are removed by the
+    # ON DELETE CASCADE on their snapshot_id foreign key.
     conn.execute(delete(snapshots).where(snapshots.c.id == snapshot_id))
     conn.commit()
 

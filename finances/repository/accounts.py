@@ -4,8 +4,9 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import Connection, delete, insert, select, update
+from sqlalchemy.exc import IntegrityError
 
-from finances.models import accounts, budget_entries
+from finances.models import accounts
 from finances.types import Account
 
 
@@ -101,13 +102,21 @@ def update_account(
 
 
 def delete_account(conn: Connection, snapshot_id: int, account_id: int) -> None:
-    _check_account_not_referenced(conn, snapshot_id, account_id)
-    result = conn.execute(
-        delete(accounts).where(
-            accounts.c.id == account_id,
-            accounts.c.snapshot_id == snapshot_id,
+    try:
+        result = conn.execute(
+            delete(accounts).where(
+                accounts.c.id == account_id,
+                accounts.c.snapshot_id == snapshot_id,
+            )
         )
-    )
+    except IntegrityError as e:
+        # NO ACTION foreign key: the account is still referenced by a budget
+        # entry (auto_account_ref) or a credit card's paymentAccountRef.
+        conn.rollback()
+        raise ValueError(
+            f"Account id {account_id} is referenced by a budget entry or a "
+            "credit card's paymentAccountRef; remove or change the reference first"
+        ) from e
     if result.rowcount == 0:
         raise ValueError(f"Account id {account_id} not found")
     conn.commit()
@@ -142,33 +151,6 @@ def move_account(
         update(accounts).where(accounts.c.id == swap_id).values(sort_order=order_a)
     )
     conn.commit()
-
-
-def _check_account_not_referenced(
-    conn: Connection, snapshot_id: int, account_id: int
-) -> None:
-    ref = conn.execute(
-        select(budget_entries.c.id).where(
-            budget_entries.c.snapshot_id == snapshot_id,
-            budget_entries.c.auto_account_ref == account_id,
-        )
-    ).first()
-    if ref:
-        raise ValueError(
-            f"Account id {account_id} is referenced by a budget entry; "
-            "remove or change autoAccountRef first"
-        )
-    ref = conn.execute(
-        select(accounts.c.id).where(
-            accounts.c.snapshot_id == snapshot_id,
-            accounts.c.payment_account_ref == account_id,
-        )
-    ).first()
-    if ref:
-        raise ValueError(
-            f"Account id {account_id} is referenced by a credit card's paymentAccountRef; "
-            "remove or change paymentAccountRef first"
-        )
 
 
 _COL_TO_FIELD = {

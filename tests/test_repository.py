@@ -2,6 +2,7 @@
 
 import pytest
 from sqlalchemy import create_engine
+from sqlalchemy.exc import IntegrityError
 
 from finances.db import init_db
 from finances.repository.accounts import (
@@ -164,7 +165,30 @@ def test_delete_snapshot(conn):
     c, snap_id = conn
     delete_snapshot(c, snap_id)
     assert get_snapshot_id(c, "test") is None
+    # Child rows are removed by ON DELETE CASCADE, even though budget/asset
+    # entries carry NO ACTION cross-references to accounts/assets.
     assert get_accounts(c, snap_id) == []
+    assert get_budget_entries(c, snap_id) == []
+    assert get_asset_entries(c, snap_id) == []
+
+
+def test_foreign_keys_enforced(conn):
+    """PRAGMA foreign_keys is ON: a budget entry cannot reference a
+    nonexistent account."""
+    c, snap_id = conn
+    with pytest.raises(IntegrityError):
+        add_budget_entry(
+            c,
+            snap_id,
+            {
+                "kind": "income",
+                "description": "Bad ref",
+                "amount": 100,
+                "recurrence": "monthly",
+                "autoAccountRef": 999999,
+            },
+        )
+    c.rollback()
 
 
 # =============================================================================

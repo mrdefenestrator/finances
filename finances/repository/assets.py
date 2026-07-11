@@ -4,6 +4,7 @@ from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import Connection, delete, func, insert, select, update
+from sqlalchemy.exc import IntegrityError
 
 from finances.models import asset_entries
 from finances.types import AssetEntry
@@ -117,19 +118,15 @@ def delete_asset_entry(conn: Connection, snapshot_id: int, index: int) -> None:
     if index < 0 or index >= len(rows):
         raise ValueError(f"Assets index {index} out of range (0..{len(rows) - 1})")
     db_id, kind = rows[index]
-    if kind == "asset":
-        ref = conn.execute(
-            select(asset_entries.c.id).where(
-                asset_entries.c.snapshot_id == snapshot_id,
-                asset_entries.c.asset_ref == db_id,
-            )
-        ).first()
-        if ref:
-            raise ValueError(
-                f"Asset id {db_id} is referenced by a debt; "
-                "remove or change assetRef first"
-            )
-    conn.execute(delete(asset_entries).where(asset_entries.c.id == db_id))
+    try:
+        conn.execute(delete(asset_entries).where(asset_entries.c.id == db_id))
+    except IntegrityError as e:
+        # NO ACTION foreign key: this asset is still referenced by a debt
+        # (asset_ref).
+        conn.rollback()
+        raise ValueError(
+            f"Asset id {db_id} is referenced by a debt; remove or change assetRef first"
+        ) from e
     conn.commit()
 
 
