@@ -4,28 +4,30 @@ Replaces duplicated type coercion, update, delete, and move logic
 across accounts, budget, and assets routes.
 """
 
+from decimal import Decimal, InvalidOperation
+
 from flask import current_app, request
 
 # =============================================================================
 # Field coercion maps: field name -> coercion type
 # =============================================================================
 
-FLOAT_COERCE = "float"
+DECIMAL_COERCE = "decimal"
 INT_COERCE = "int"
 
 ACCOUNTS_COERCION = {
-    "balance": FLOAT_COERCE,
-    "limit": FLOAT_COERCE,
-    "available": FLOAT_COERCE,
-    "rewards_balance": FLOAT_COERCE,
-    "statement_balance": FLOAT_COERCE,
-    "minimum_balance": FLOAT_COERCE,
+    "balance": DECIMAL_COERCE,
+    "limit": DECIMAL_COERCE,
+    "available": DECIMAL_COERCE,
+    "rewards_balance": DECIMAL_COERCE,
+    "statement_balance": DECIMAL_COERCE,
+    "minimum_balance": DECIMAL_COERCE,
     "statement_due_day_of_month": INT_COERCE,
     "paymentAccountRef": INT_COERCE,
 }
 
 BUDGET_COERCION = {
-    "amount": FLOAT_COERCE,
+    "amount": DECIMAL_COERCE,
     "dayOfMonth": INT_COERCE,
     "month": INT_COERCE,
     "dayOfYear": INT_COERCE,
@@ -33,10 +35,10 @@ BUDGET_COERCION = {
 }
 
 ASSETS_COERCION = {
-    "value": FLOAT_COERCE,
-    "quantity": FLOAT_COERCE,
-    "balance": FLOAT_COERCE,
-    "interestRate": FLOAT_COERCE,
+    "value": DECIMAL_COERCE,
+    "quantity": DECIMAL_COERCE,
+    "balance": DECIMAL_COERCE,
+    "interestRate": DECIMAL_COERCE,
     "assetRef": INT_COERCE,
 }
 
@@ -47,10 +49,10 @@ def coerce_value(field: str, value_raw: str, coercion_map: dict):
     Returns (value, error). If error is not None, coercion failed.
     """
     coerce_type = coercion_map.get(field)
-    if coerce_type == FLOAT_COERCE:
+    if coerce_type == DECIMAL_COERCE:
         try:
-            return (float(value_raw) if value_raw else None), None
-        except ValueError:
+            return (Decimal(value_raw) if value_raw else None), None
+        except InvalidOperation:
             return None, f"Invalid number for {field}"
     elif coerce_type == INT_COERCE:
         try:

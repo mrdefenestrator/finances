@@ -4,6 +4,7 @@ import argparse
 import os
 import sys
 from datetime import date
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Dict, List
 
@@ -49,7 +50,7 @@ def _sort_items(
         if val is None:
             return (1, "")
         # Handle numeric values
-        if isinstance(val, (int, float)):
+        if isinstance(val, (int, float, Decimal)):
             return (0, val)
         # Handle string values (case-insensitive)
         return (0, str(val).lower())

@@ -1,6 +1,5 @@
 """Account repository: CRUD + move for accounts within a snapshot."""
 
-from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import Connection, delete, insert, select, update
@@ -32,12 +31,9 @@ def _row_to_account(row) -> Account:
     ):
         val = r.get(src)
         if val is not None:
-            acc[dst] = (
-                float(val)
-                if isinstance(val, (int, float, Decimal))
-                and src not in ("statement_due_day_of_month", "payment_account_ref")
-                else val
-            )
+            # Money columns stay Decimal (Numeric); int/str columns come back
+            # as int/str from SQLite. No float coercion — see calculations._money.
+            acc[dst] = val
     return acc
 
 

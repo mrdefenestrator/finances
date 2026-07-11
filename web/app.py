@@ -2,6 +2,7 @@
 """Flask web application for finances tracker (read-only view + inline edit)."""
 
 import os
+from decimal import Decimal
 from pathlib import Path
 
 from flask import Flask, render_template
@@ -39,7 +40,7 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def _display_is_negative(value):
     """True if value is a number < 0 or a string that looks like a negative (e.g. ($1.00) or -1)."""
-    if isinstance(value, (int, float)):
+    if isinstance(value, (int, float, Decimal)):
         return value < 0
     if isinstance(value, str):
         s = value.strip()

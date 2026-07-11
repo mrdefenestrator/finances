@@ -1,6 +1,5 @@
 """Asset/debt repository: CRUD + move for asset_entries within a snapshot."""
 
-from decimal import Decimal
 from typing import Any
 
 from sqlalchemy import Connection, delete, func, insert, select, update
@@ -33,11 +32,9 @@ def _row_to_asset_entry(row) -> AssetEntry:
     for col, field in optional_map.items():
         val = r.get(col)
         if val is not None:
-            entry[field] = (
-                float(val)
-                if isinstance(val, (int, float, Decimal)) and col not in ("asset_ref",)
-                else val
-            )
+            # Money columns stay Decimal (Numeric); asset_ref stays int. No
+            # float coercion — see calculations._money.
+            entry[field] = val
     # Store DB id for index operations (not exposed in TypedDict)
     entry["_db_id"] = r["id"]
     return entry

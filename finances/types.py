@@ -1,5 +1,6 @@
 """Type definitions for finances entities using TypedDict."""
 
+from decimal import Decimal
 from typing import Literal, TypedDict
 
 # Account types enum
@@ -34,15 +35,15 @@ class Account(TypedDict, total=False):
     id: int  # Required - unique identifier
     name: str  # Required - display name
     type: AccountType  # Required - account type
-    balance: float  # For non-credit_card accounts
-    limit: float  # For credit_card accounts
-    available: float  # For credit_card accounts
-    rewards_balance: float  # Optional for credit_card
-    statement_balance: float  # Optional for credit_card
+    balance: Decimal  # For non-credit_card accounts
+    limit: Decimal  # For credit_card accounts
+    available: Decimal  # For credit_card accounts
+    rewards_balance: Decimal  # Optional for credit_card
+    statement_balance: Decimal  # Optional for credit_card
     statement_due_day_of_month: int  # Optional for credit_card (1-31)
     paymentAccountRef: int  # Account id for CC autopay source
     asOfDate: str  # ISO8601 date string
-    minimum_balance: float  # Target floor balance
+    minimum_balance: Decimal  # Target floor balance
     institution: str  # Bank/provider name
     partial_account_number: str  # Last 4 digits etc.
 
@@ -52,7 +53,7 @@ class BudgetEntry(TypedDict, total=False):
 
     kind: Literal["income", "expense"]  # Required - income or expense
     description: str  # Required - label
-    amount: float  # Required - amount
+    amount: Decimal  # Required - amount
     recurrence: Recurrence  # Required - recurrence type
     type: str  # Optional category (income or expense type)
     date: str  # For one_time - ISO8601
@@ -71,14 +72,14 @@ class AssetEntry(TypedDict, total=False):
     id: int  # For asset entries - unique identifier; referenced by debt assetRef
     institution: str  # Optional provider/lender name
     # Asset-only fields
-    value: float  # Estimated value per unit
+    value: Decimal  # Estimated value per unit
     source: str  # Optional valuation source
     # Shared (asset + debt) fields
-    quantity: float  # Optional; default 1. Assets: value × quantity. Debts: balance × quantity
+    quantity: Decimal  # Optional; default 1. Assets: value × quantity. Debts: balance × quantity
     # Debt-only fields
-    balance: float  # Amount owed per unit
+    balance: Decimal  # Amount owed per unit
     assetRef: int  # Optional link to asset entry id
-    interestRate: float  # Optional annual rate as decimal
+    interestRate: Decimal  # Optional annual rate as decimal
     nextDueDate: str  # Optional ISO8601 date
     asOfDate: str  # Optional ISO8601 date
 

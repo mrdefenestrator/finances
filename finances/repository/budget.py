@@ -13,7 +13,7 @@ def _row_to_budget_entry(row) -> BudgetEntry:
     entry: BudgetEntry = {
         "kind": r["kind"],
         "description": r["description"],
-        "amount": float(r["amount"]),
+        "amount": r["amount"],  # Decimal (Numeric); see calculations._money
         "recurrence": r["recurrence"],
     }
     optional_map = {
