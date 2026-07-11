@@ -345,7 +345,7 @@
                                 </a>
                                 <form method="POST" action="{{ url_for('files.delete') }}"
                                     class="shrink-0 file-row-actions">
-                                    <input type="hidden" name="name" value="{{ f }}.yaml">
+                                    <input type="hidden" name="name" value="{{ f }}">
                                     <button type="submit" title="Delete {{ f }}.yaml"
                                         class="p-1 text-gray-400 dark:text-gray-500 hover:text-red-500 dark:hover:text-red-400"
                                         onclick="return confirm('Delete {{ f }}?')">
@@ -379,11 +379,11 @@
                                   method="POST">
                                 <!-- Copy: hidden source field -->
                                 <template x-if="mode === 'copy'">
-                                    <input type="hidden" name="source" value="{{ filename }}.yaml">
+                                    <input type="hidden" name="source" value="{{ filename }}">
                                 </template>
                                 <!-- Rename: hidden old_name field -->
                                 <template x-if="mode === 'rename'">
-                                    <input type="hidden" name="old_name" value="{{ filename }}.yaml">
+                                    <input type="hidden" name="old_name" value="{{ filename }}">
                                 </template>
                                 <div class="flex gap-2">
                                     <input x-ref="nameInput" x-model="inputName"
