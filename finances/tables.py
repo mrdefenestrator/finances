@@ -1,5 +1,6 @@
 """Table builders for status and subcommands (CLI and web)."""
 
+from decimal import Decimal
 from typing import Any, Dict, List
 
 from .calculations import (
@@ -222,9 +223,9 @@ def _build_budget_table(
         return account_display_by_id.get(ref, "-") if ref is not None else "-"
 
     rows = []
-    total_subtotal = 0.0
-    total_monthly = 0.0
-    total_annual = 0.0
+    total_subtotal = Decimal("0")
+    total_monthly = Decimal("0")
+    total_annual = Decimal("0")
     for idx, e in enumerate(budget):
         kind = e.get("kind", "income")
         sign = 1 if kind == "income" else -1
@@ -322,7 +323,7 @@ def _build_net_worth_table(
         if e.get("kind") == "asset" and e.get("id") is not None
     }
     rows = []
-    total_subtotal = 0.0
+    total_subtotal = Decimal("0")
     for idx, entry in enumerate(assets):
         kind = entry.get("kind", "asset")
         qty = entry.get("quantity")

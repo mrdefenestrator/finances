@@ -1,16 +1,12 @@
 """Budget blueprint - unified income/expenses table and CRUD operations."""
 
-from flask import Blueprint, abort, render_template, request
+from flask import Blueprint, abort, current_app, render_template, request
 
 import finances
-from finances.writer import (
-    add_budget_entry as writer_add_budget_entry,
-    delete_budget_entry as writer_delete_budget_entry,
-    move_budget_entry as writer_move_budget_entry,
-    update_budget_entry as writer_update_budget_entry,
-)
+from finances.loader import load_finances_from_db
+from finances.repository import budget as repo_budget
 
-from .common import drop_separator_rows, get_common_context, validate_url_filename
+from .common import drop_separator_rows, get_common_context, validate_snapshot
 from .crud import (
     BUDGET_COERCION,
     coerce_value,
@@ -20,7 +16,6 @@ from .crud import (
 
 budget_bp = Blueprint("budget", __name__, url_prefix="/f")
 
-# Use constants from finances (single source of truth)
 BUDGET_KINDS = finances.BUDGET_KINDS
 BUDGET_INCOME_TYPES = finances.BUDGET_INCOME_TYPES
 BUDGET_EXPENSE_TYPES = finances.BUDGET_EXPENSE_TYPES
@@ -29,7 +24,8 @@ RECURRENCE_OPTIONS = finances.RECURRENCE_OPTIONS
 
 
 def _render_tbody(
-    path,
+    snapshot_id: int,
+    filename: str,
     edit_mode=True,
     updated_index=None,
     updated_field=None,
@@ -41,9 +37,7 @@ def _render_tbody(
     editing_when_day=None,
     editing_when_continuous=False,
 ):
-    """Render the full budget tbody after an update."""
-    filename = path.stem
-    ctx = get_common_context(path, edit_mode)
+    ctx = get_common_context(snapshot_id, filename, edit_mode)
     budget = ctx["budget"]
     headers, rows = finances._build_budget_table(
         budget,
@@ -84,10 +78,9 @@ def _render_tbody(
 
 @budget_bp.route("/<filename>/budget")
 def budget_view(filename: str):
-    """Income/expenses (budget) table with prorated subtotals."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
     edit_mode = request.args.get("edit") == "1"
-    ctx = get_common_context(path, edit_mode)
+    ctx = get_common_context(snapshot_id, filename, edit_mode)
     ctx["active_tab"] = "budget"
     ctx["sort_col"] = request.args.get("sort_col", "")
     ctx["sort_dir"] = request.args.get("sort_dir", "")
@@ -116,7 +109,6 @@ def budget_view(filename: str):
     )
     ctx["rows"] = drop_separator_rows(ctx["rows"])
     full_budget = ctx["budget"]
-    # Map filtered entries back to their global indices
     budget_global = [full_budget.index(e) for e in budget] if budget else []
     data_rows = ctx["rows"][: len(budget)] if ctx["rows"] else []
     ctx["budget_edit_rows"] = [
@@ -138,9 +130,10 @@ def budget_view(filename: str):
 
 @budget_bp.route("/<filename>/budget/delete-btn/<int:index>")
 def delete_btn(filename: str, index: int):
-    """Return delete button cell fragment (for cancel)."""
-    path = validate_url_filename(filename)
-    data = finances.load_finances(path)
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
     budget = data.get("budget") or []
     if index < 0 or index >= len(budget):
         abort(404)
@@ -156,9 +149,10 @@ def delete_btn(filename: str, index: int):
 
 @budget_bp.route("/<filename>/budget/delete-confirm/<int:index>")
 def delete_confirm(filename: str, index: int):
-    """Return delete confirm cell fragment."""
-    path = validate_url_filename(filename)
-    data = finances.load_finances(path)
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
     budget = data.get("budget") or []
     if index < 0 or index >= len(budget):
         abort(404)
@@ -173,22 +167,27 @@ def delete_confirm(filename: str, index: int):
 
 @budget_bp.route("/<filename>/budget/delete/<int:index>", methods=["POST"])
 def delete(filename: str, index: int):
-    """Delete budget entry by index."""
-    path = validate_url_filename(filename)
-    return handle_delete(lambda p: writer_delete_budget_entry(p, index), path)
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    return handle_delete(
+        lambda conn: repo_budget.delete_budget_entry(conn, snapshot_id, index),
+        engine,
+    )
 
 
 @budget_bp.route("/<filename>/budget/move/<int:index>", methods=["POST"])
 def move(filename: str, index: int):
-    """Move budget entry up/down."""
-    path = validate_url_filename(filename)
-    return handle_move(lambda p, d: writer_move_budget_entry(p, index, d), path)
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    return handle_move(
+        lambda conn, d: repo_budget.move_budget_entry(conn, snapshot_id, index, d),
+        engine,
+    )
 
 
 @budget_bp.route("/<filename>/budget/add", methods=["POST"])
 def add(filename: str):
-    """Add income or expense budget entry."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
     kind = request.form.get("kind", "income").strip()
     if kind not in ("income", "expense"):
         abort(400)
@@ -217,12 +216,12 @@ def add(filename: str):
             entry[key] = val
         elif key == "date" and val:
             entry[key] = val
+    engine = current_app.config["engine"]
     try:
-        writer_add_budget_entry(path, entry)
+        with engine.connect() as conn:
+            repo_budget.add_budget_entry(conn, snapshot_id, entry)
     except ValueError:
         return "", 422
-    from flask import current_app
-
     resp = current_app.make_response("")
     resp.headers["HX-Refresh"] = "true"
     return resp
@@ -230,21 +229,23 @@ def add(filename: str):
 
 @budget_bp.route("/<filename>/budget/cell/<int:index>")
 def cell_edit(filename: str, index: int):
-    """Return tbody with cell in edit mode."""
     field = request.args.get("field", "description")
-    path = validate_url_filename(filename)
-    data = finances.load_finances(path)
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
     budget = data.get("budget") or []
     if index < 0 or index >= len(budget):
         abort(404)
     entry = budget[index]
 
     if request.args.get("display") == "1":
-        return _render_tbody(path, edit_mode=True)
+        return _render_tbody(snapshot_id, filename, edit_mode=True)
 
     if field == "when":
         return _render_tbody(
-            path,
+            snapshot_id,
+            filename,
             edit_mode=True,
             editing_index=index,
             editing_field=field,
@@ -264,7 +265,8 @@ def cell_edit(filename: str, index: int):
         value = str(value)
 
     return _render_tbody(
-        path,
+        snapshot_id,
+        filename,
         edit_mode=True,
         editing_index=index,
         editing_field=field,
@@ -274,38 +276,41 @@ def cell_edit(filename: str, index: int):
 
 @budget_bp.route("/<filename>/budget/update/<int:index>", methods=["POST"])
 def update(filename: str, index: int):
-    """Update one budget entry field. Returns full tbody HTML."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
     field = request.form.get("field", "description").strip()
     value_raw = request.form.get("value", "").strip()
 
     if not field:
-        return _render_tbody(path, edit_mode=True), 422
+        return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
     value, error = coerce_value(field, value_raw, BUDGET_COERCION)
     if error:
-        return _render_tbody(path, edit_mode=True), 422
+        return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
-    # Check if unchanged
-    data = finances.load_finances(path)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
     budget = data.get("budget") or []
     if index < 0 or index >= len(budget):
         abort(404)
     if budget[index].get(field) == value:
         return _render_tbody(
-            path,
+            snapshot_id,
+            filename,
             edit_mode=True,
             updated_index=index,
             updated_field=field,
         )
 
     try:
-        writer_update_budget_entry(path, index, {field: value})
+        with engine.connect() as conn:
+            repo_budget.update_budget_entry(conn, snapshot_id, index, {field: value})
     except ValueError:
-        return _render_tbody(path, edit_mode=True), 422
+        return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
     return _render_tbody(
-        path,
+        snapshot_id,
+        filename,
         edit_mode=True,
         updated_index=index,
         updated_field=field,
@@ -314,8 +319,8 @@ def update(filename: str, index: int):
 
 @budget_bp.route("/<filename>/budget/when/<int:index>", methods=["POST"])
 def when_update(filename: str, index: int):
-    """Update 'when' fields (month, dayOfMonth, continuous) for a budget entry."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
 
     month_raw = request.form.get("month", "").strip()
     day_raw = request.form.get("dayOfMonth", "").strip()
@@ -327,27 +332,31 @@ def when_update(filename: str, index: int):
         try:
             updates["month"] = int(month_raw)
         except ValueError:
-            return _render_tbody(path, edit_mode=True), 422
+            return _render_tbody(snapshot_id, filename, edit_mode=True), 422
     if day_raw:
         try:
             updates["dayOfMonth"] = int(day_raw)
         except ValueError:
-            return _render_tbody(path, edit_mode=True), 422
+            return _render_tbody(snapshot_id, filename, edit_mode=True), 422
     if continuous_raw == "true":
         updates["continuous"] = True
     elif continuous_raw == "false":
         delete_keys.append("continuous")
 
     if not updates and not delete_keys:
-        return _render_tbody(path, edit_mode=True)
+        return _render_tbody(snapshot_id, filename, edit_mode=True)
 
     try:
-        writer_update_budget_entry(path, index, updates, delete_keys)
+        with engine.connect() as conn:
+            repo_budget.update_budget_entry(
+                conn, snapshot_id, index, updates, delete_keys
+            )
     except ValueError:
-        return _render_tbody(path, edit_mode=True), 422
+        return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
     return _render_tbody(
-        path,
+        snapshot_id,
+        filename,
         edit_mode=True,
         updated_index=index,
         updated_field="when",

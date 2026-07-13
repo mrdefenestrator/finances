@@ -4,28 +4,30 @@ Replaces duplicated type coercion, update, delete, and move logic
 across accounts, budget, and assets routes.
 """
 
+from decimal import Decimal, InvalidOperation
+
 from flask import current_app, request
 
 # =============================================================================
 # Field coercion maps: field name -> coercion type
 # =============================================================================
 
-FLOAT_COERCE = "float"
+DECIMAL_COERCE = "decimal"
 INT_COERCE = "int"
 
 ACCOUNTS_COERCION = {
-    "balance": FLOAT_COERCE,
-    "limit": FLOAT_COERCE,
-    "available": FLOAT_COERCE,
-    "rewards_balance": FLOAT_COERCE,
-    "statement_balance": FLOAT_COERCE,
-    "minimum_balance": FLOAT_COERCE,
+    "balance": DECIMAL_COERCE,
+    "limit": DECIMAL_COERCE,
+    "available": DECIMAL_COERCE,
+    "rewards_balance": DECIMAL_COERCE,
+    "statement_balance": DECIMAL_COERCE,
+    "minimum_balance": DECIMAL_COERCE,
     "statement_due_day_of_month": INT_COERCE,
     "paymentAccountRef": INT_COERCE,
 }
 
 BUDGET_COERCION = {
-    "amount": FLOAT_COERCE,
+    "amount": DECIMAL_COERCE,
     "dayOfMonth": INT_COERCE,
     "month": INT_COERCE,
     "dayOfYear": INT_COERCE,
@@ -33,10 +35,10 @@ BUDGET_COERCION = {
 }
 
 ASSETS_COERCION = {
-    "value": FLOAT_COERCE,
-    "quantity": FLOAT_COERCE,
-    "balance": FLOAT_COERCE,
-    "interestRate": FLOAT_COERCE,
+    "value": DECIMAL_COERCE,
+    "quantity": DECIMAL_COERCE,
+    "balance": DECIMAL_COERCE,
+    "interestRate": DECIMAL_COERCE,
     "assetRef": INT_COERCE,
 }
 
@@ -47,10 +49,10 @@ def coerce_value(field: str, value_raw: str, coercion_map: dict):
     Returns (value, error). If error is not None, coercion failed.
     """
     coerce_type = coercion_map.get(field)
-    if coerce_type == FLOAT_COERCE:
+    if coerce_type == DECIMAL_COERCE:
         try:
-            return (float(value_raw) if value_raw else None), None
-        except ValueError:
+            return (Decimal(value_raw) if value_raw else None), None
+        except InvalidOperation:
             return None, f"Invalid number for {field}"
     elif coerce_type == INT_COERCE:
         try:
@@ -60,81 +62,16 @@ def coerce_value(field: str, value_raw: str, coercion_map: dict):
     return value_raw, None
 
 
-def handle_update(
-    path,
-    field: str,
-    value_raw: str,
-    coercion_map: dict,
-    get_entry_fn,
-    writer_fn,
-    render_tbody_fn,
-    entry_id_kwargs: dict,
-    editable_check_fn=None,
-):
-    """Generic update handler for a single field.
-
-    Args:
-        path: Path to YAML file
-        field: Field name to update
-        value_raw: Raw string value from form
-        coercion_map: Field->type mapping for coercion
-        get_entry_fn: callable(path) -> entry dict or None
-        writer_fn: callable(path, updates) -> None
-        render_tbody_fn: callable(**kwargs) -> HTML string
-        entry_id_kwargs: dict of id params for render_tbody (e.g. updated_account_id=1)
-        editable_check_fn: optional callable(entry, field) -> bool
-    """
-    if not field:
-        return render_tbody_fn(path, edit_mode=True), 422
-
-    # Check editability
-    entry = get_entry_fn(path)
-    if editable_check_fn and entry is not None and not editable_check_fn(entry, field):
-        return render_tbody_fn(
-            path,
-            edit_mode=True,
-            **entry_id_kwargs,
-        )
-
-    # Coerce value
-    value, error = coerce_value(field, value_raw, coercion_map)
-    if error:
-        return render_tbody_fn(path, edit_mode=True), 422
-
-    # Check if unchanged
-    entry = get_entry_fn(path)
-    if entry is not None:
-        current = entry.get(field)
-        if current == value:
-            return render_tbody_fn(
-                path,
-                edit_mode=True,
-                **entry_id_kwargs,
-            )
-
-    # Write
-    updates = {field: value}
-    try:
-        writer_fn(path, updates)
-    except ValueError:
-        return render_tbody_fn(path, edit_mode=True), 422
-
-    return render_tbody_fn(
-        path,
-        edit_mode=True,
-        **entry_id_kwargs,
-    )
-
-
-def handle_delete(writer_fn, path):
+def handle_delete(writer_fn, engine):
     """Generic delete handler.
 
     Args:
-        writer_fn: callable(path) -> None, may raise ValueError
-        path: Path to YAML file
+        writer_fn: callable(conn) -> None, may raise ValueError
+        engine: SQLAlchemy Engine
     """
     try:
-        writer_fn(path)
+        with engine.connect() as conn:
+            writer_fn(conn)
     except ValueError:
         return "", 422
     resp = current_app.make_response("")
@@ -142,18 +79,19 @@ def handle_delete(writer_fn, path):
     return resp
 
 
-def handle_move(writer_fn, path):
+def handle_move(writer_fn, engine):
     """Generic move handler.
 
     Args:
-        writer_fn: callable(path, direction) -> None, may raise ValueError
-        path: Path to YAML file
+        writer_fn: callable(conn, direction) -> None, may raise ValueError
+        engine: SQLAlchemy Engine
     """
     direction = request.args.get("direction", "up").lower()
     if direction not in ("up", "down"):
         return "", 422
     try:
-        writer_fn(path, direction)
+        with engine.connect() as conn:
+            writer_fn(conn, direction)
     except ValueError:
         return "", 422
     resp = current_app.make_response("")

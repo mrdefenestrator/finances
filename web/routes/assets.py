@@ -3,14 +3,10 @@
 from flask import Blueprint, abort, current_app, render_template, request
 
 import finances
-from finances.writer import (
-    add_asset_entry as writer_add_asset_entry,
-    delete_asset_entry as writer_delete_asset_entry,
-    move_asset_entry as writer_move_asset_entry,
-    update_asset_entry as writer_update_asset_entry,
-)
+from finances.loader import load_finances_from_db
+from finances.repository import assets as repo_assets
 
-from .common import drop_separator_rows, get_common_context, validate_url_filename
+from .common import drop_separator_rows, get_common_context, validate_snapshot
 from .crud import (
     ASSETS_COERCION,
     coerce_value,
@@ -20,12 +16,12 @@ from .crud import (
 
 assets_bp = Blueprint("assets", __name__, url_prefix="/f")
 
-# Use constants from finances (single source of truth)
 ASSETS_KINDS = finances.ASSETS_KINDS
 
 
 def _render_tbody(
-    path,
+    snapshot_id: int,
+    filename: str,
     edit_mode=True,
     updated_index=None,
     updated_field=None,
@@ -33,22 +29,21 @@ def _render_tbody(
     editing_field=None,
     editing_value=None,
 ):
-    """Render the full assets tbody after an update."""
-    filename = path.stem
-    ctx = get_common_context(path, edit_mode)
-    assets = ctx["assets"]
+    ctx = get_common_context(snapshot_id, filename, edit_mode)
+    asset_list = ctx["assets"]
 
-    headers, rows = finances._build_net_worth_table(assets)
+    headers, rows = finances._build_net_worth_table(asset_list)
     rows = drop_separator_rows(rows)
 
-    data_rows = rows[: len(assets)] if rows else []
+    data_rows = rows[: len(asset_list)] if rows else []
     assets_edit_rows = [
-        (assets[i].get("kind", "asset"), i, data_rows[i]) for i in range(len(assets))
+        (asset_list[i].get("kind", "asset"), i, data_rows[i])
+        for i in range(len(asset_list))
     ]
 
     asset_by_id = {
         e["id"]: e
-        for e in assets
+        for e in asset_list
         if e.get("kind") == "asset" and e.get("id") is not None
     }
 
@@ -70,10 +65,9 @@ def _render_tbody(
 
 @assets_bp.route("/<filename>/assets")
 def assets_view(filename: str):
-    """Assets and debts table with optional filters."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
     edit_mode = request.args.get("edit") == "1"
-    ctx = get_common_context(path, edit_mode)
+    ctx = get_common_context(snapshot_id, filename, edit_mode)
     ctx["active_tab"] = "assets"
     ctx["sort_col"] = request.args.get("sort_col", "")
     ctx["sort_dir"] = request.args.get("sort_dir", "")
@@ -85,7 +79,6 @@ def assets_view(filename: str):
     include_kinds_set = set(k.lower() for k in include_kinds)
     ctx["headers"], ctx["rows"] = finances._build_net_worth_table(filtered)
     ctx["rows"] = drop_separator_rows(ctx["rows"])
-    # Global indices: map filtered entries back to their positions in all_assets
     global_indices = [all_assets.index(e) for e in filtered] if filtered else []
     data_rows = ctx["rows"][: len(filtered)] if ctx["rows"] else []
     ctx["assets_edit_rows"] = [
@@ -105,13 +98,14 @@ def assets_view(filename: str):
 
 @assets_bp.route("/<filename>/assets/delete-btn/<int:index>")
 def delete_btn(filename: str, index: int):
-    """Return delete button cell fragment (for cancel)."""
-    path = validate_url_filename(filename)
-    data = finances.load_finances(path)
-    assets = data.get("assets") or []
-    if index < 0 or index >= len(assets):
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
+    asset_list = data.get("assets") or []
+    if index < 0 or index >= len(asset_list):
         abort(404)
-    kind = assets[index].get("kind", "asset")
+    kind = asset_list[index].get("kind", "asset")
     return render_template(
         "partials/assets_delete_icon.html",
         filename=filename,
@@ -123,13 +117,14 @@ def delete_btn(filename: str, index: int):
 
 @assets_bp.route("/<filename>/assets/delete-confirm/<int:index>")
 def delete_confirm(filename: str, index: int):
-    """Return delete confirm cell fragment."""
-    path = validate_url_filename(filename)
-    data = finances.load_finances(path)
-    assets = data.get("assets") or []
-    if index < 0 or index >= len(assets):
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
+    asset_list = data.get("assets") or []
+    if index < 0 or index >= len(asset_list):
         abort(404)
-    kind = assets[index].get("kind", "asset")
+    kind = asset_list[index].get("kind", "asset")
     return render_template(
         "partials/assets_delete_confirm.html",
         filename=filename,
@@ -140,22 +135,27 @@ def delete_confirm(filename: str, index: int):
 
 @assets_bp.route("/<filename>/assets/delete/<int:index>", methods=["POST"])
 def delete(filename: str, index: int):
-    """Delete asset or debt by global index."""
-    path = validate_url_filename(filename)
-    return handle_delete(lambda p: writer_delete_asset_entry(p, index), path)
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    return handle_delete(
+        lambda conn: repo_assets.delete_asset_entry(conn, snapshot_id, index),
+        engine,
+    )
 
 
 @assets_bp.route("/<filename>/assets/move/<int:index>", methods=["POST"])
 def move(filename: str, index: int):
-    """Move asset or debt up/down by global index."""
-    path = validate_url_filename(filename)
-    return handle_move(lambda p, d: writer_move_asset_entry(p, index, d), path)
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    return handle_move(
+        lambda conn, d: repo_assets.move_asset_entry(conn, snapshot_id, index, d),
+        engine,
+    )
 
 
 @assets_bp.route("/<filename>/assets/add", methods=["POST"])
 def add(filename: str):
-    """Add asset or debt. kind comes from form field."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
     kind = request.form.get("kind", "asset").strip()
     if kind not in ("asset", "debt"):
         abort(400)
@@ -199,8 +199,10 @@ def add(filename: str):
             entry["quantity"] = float(qty_raw)
         except ValueError:
             pass
+    engine = current_app.config["engine"]
     try:
-        writer_add_asset_entry(path, entry)
+        with engine.connect() as conn:
+            repo_assets.add_asset_entry(conn, snapshot_id, entry)
     except ValueError:
         return "", 422
     resp = current_app.make_response("")
@@ -210,17 +212,18 @@ def add(filename: str):
 
 @assets_bp.route("/<filename>/assets/cell/<int:index>")
 def cell_edit(filename: str, index: int):
-    """Return tbody with cell in edit mode."""
     field = request.args.get("field", "name")
-    path = validate_url_filename(filename)
-    data = finances.load_finances(path)
-    entries = data.get("assets") or []
-    if index < 0 or index >= len(entries):
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
+    asset_list = data.get("assets") or []
+    if index < 0 or index >= len(asset_list):
         abort(404)
-    entry = entries[index]
+    entry = asset_list[index]
 
     if request.args.get("display") == "1":
-        return _render_tbody(path, edit_mode=True)
+        return _render_tbody(snapshot_id, filename, edit_mode=True)
 
     value = entry.get(field, "")
     if value is None:
@@ -229,7 +232,8 @@ def cell_edit(filename: str, index: int):
         value = str(value)
 
     return _render_tbody(
-        path,
+        snapshot_id,
+        filename,
         edit_mode=True,
         editing_index=index,
         editing_field=field,
@@ -239,38 +243,41 @@ def cell_edit(filename: str, index: int):
 
 @assets_bp.route("/<filename>/assets/update/<int:index>", methods=["POST"])
 def update(filename: str, index: int):
-    """Update one asset/debt field. Returns full tbody HTML."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
     field = request.form.get("field", "name").strip()
     value_raw = request.form.get("value", "").strip()
 
     if not field:
-        return _render_tbody(path, edit_mode=True), 422
+        return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
     value, error = coerce_value(field, value_raw, ASSETS_COERCION)
     if error:
-        return _render_tbody(path, edit_mode=True), 422
+        return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
-    # Check if unchanged
-    data = finances.load_finances(path)
-    entries = data.get("assets") or []
-    if index < 0 or index >= len(entries):
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
+    asset_list = data.get("assets") or []
+    if index < 0 or index >= len(asset_list):
         abort(404)
-    if entries[index].get(field) == value:
+    if asset_list[index].get(field) == value:
         return _render_tbody(
-            path,
+            snapshot_id,
+            filename,
             edit_mode=True,
             updated_index=index,
             updated_field=field,
         )
 
     try:
-        writer_update_asset_entry(path, index, {field: value})
+        with engine.connect() as conn:
+            repo_assets.update_asset_entry(conn, snapshot_id, index, {field: value})
     except ValueError:
-        return _render_tbody(path, edit_mode=True), 422
+        return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
     return _render_tbody(
-        path,
+        snapshot_id,
+        filename,
         edit_mode=True,
         updated_index=index,
         updated_field=field,

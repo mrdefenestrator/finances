@@ -1,24 +1,17 @@
-"""Status blueprint - shows file selection at root."""
+"""Status blueprint - shows snapshot selection at root."""
 
-from flask import Blueprint, render_template
+from flask import Blueprint, current_app, render_template
 
-from .common import DATA_DIR
+from finances.repository.snapshots import list_snapshots
 
 status_bp = Blueprint("status", __name__)
 
 
 @status_bp.route("/")
 def status_view():
-    """Show file selection page."""
-    available_files = (
-        sorted(
-            f.stem
-            for f in DATA_DIR.iterdir()
-            if f.is_file() and f.suffix in (".yaml", ".yml")
-        )
-        if DATA_DIR.exists()
-        else []
-    )
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        available_files = list_snapshots(conn)
     return render_template(
         "file_select.html",
         filename="",

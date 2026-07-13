@@ -2,21 +2,17 @@
 
 from datetime import date
 
-from flask import Blueprint, abort, render_template, request
+from flask import Blueprint, abort, current_app, render_template, request
 
 import finances
-from finances.writer import (
-    add_account as writer_add_account,
-    delete_account as writer_delete_account,
-    move_account as writer_move_account,
-    update_account as writer_update_account,
-)
+from finances.loader import load_finances_from_db
+from finances.repository import accounts as repo_accounts
 
 from .common import (
     account_field_editable,
     drop_separator_rows,
     get_common_context,
-    validate_url_filename,
+    validate_snapshot,
 )
 from .crud import (
     ACCOUNTS_COERCION,
@@ -26,12 +22,12 @@ from .crud import (
 
 accounts_bp = Blueprint("accounts", __name__, url_prefix="/f")
 
-# Use constants from finances (single source of truth)
 ACCOUNT_TYPES = finances.ACCOUNT_TYPES
 
 
 def _render_tbody(
-    path,
+    snapshot_id: int,
+    filename: str,
     edit_mode=True,
     updated_account_id=None,
     updated_field=None,
@@ -39,27 +35,27 @@ def _render_tbody(
     editing_field=None,
     editing_value=None,
 ):
-    """Render the full accounts tbody after an update."""
-    filename = path.stem
-    data = finances.load_finances(path)
-    accounts = data.get("accounts") or []
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
+    accs = data.get("accounts") or []
     budget = data.get("budget") or []
     today = date.today()
-    n2 = finances.liquid_minus_cc(accounts)
-    account_display_by_id = finances._account_display_by_id(accounts)
+    n2 = finances.liquid_minus_cc(accs)
+    account_display_by_id = finances._account_display_by_id(accs)
     headers, rows = finances._build_accounts_table(
-        accounts, n2, account_display_by_id=account_display_by_id
+        accs, n2, account_display_by_id=account_display_by_id
     )
     rows = drop_separator_rows(rows)
     funding_by_id = {
         acc["id"]: finances.account_funding_needed(
-            acc, accounts, budget, today, default_reserve=0
+            acc, accs, budget, today, default_reserve=0
         )
-        for acc in accounts
+        for acc in accs
         if finances._ACCOUNT_TYPE_TO_CALCULATION.get(acc.get("type")) == "liquid"
     }
     rows[-1] += ["-", "-"]
-    edit_rows = list(zip(accounts, rows))
+    edit_rows = list(zip(accs, rows))
 
     return render_template(
         "partials/accounts_tbody.html",
@@ -80,30 +76,28 @@ def _render_tbody(
 
 @accounts_bp.route("/<filename>/accounts")
 def accounts_view(filename: str):
-    """Accounts table with optional filters and edit mode."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
     edit_mode = request.args.get("edit") == "1"
-    ctx = get_common_context(path, edit_mode)
+    ctx = get_common_context(snapshot_id, filename, edit_mode)
     ctx["active_tab"] = "accounts"
     ctx["sort_col"] = request.args.get("sort_col", "")
     ctx["sort_dir"] = request.args.get("sort_dir", "")
     include_types = (
         request.args.getlist("include_type") or request.args.getlist("type") or []
     )
-    accounts = finances.filter_accounts_by_type(ctx["accounts"], include_types or None)
+    accs = finances.filter_accounts_by_type(ctx["accounts"], include_types or None)
     include_types_set = set(t.lower() for t in include_types)
-    n2 = finances.liquid_minus_cc(accounts)
+    n2 = finances.liquid_minus_cc(accs)
     account_display_by_id = ctx["account_display_by_id"]
     ctx["headers"], ctx["rows"] = finances._build_accounts_table(
-        accounts, n2, account_display_by_id=account_display_by_id
+        accs, n2, account_display_by_id=account_display_by_id
     )
     ctx["rows"] = drop_separator_rows(ctx["rows"])
     ctx["include_types"] = [t for t in ACCOUNT_TYPES if t in include_types_set]
     ctx["account_types"] = ACCOUNT_TYPES
-    ctx["accounts_raw"] = accounts
-    ctx["edit_rows"] = list(zip(accounts, ctx["rows"]))
+    ctx["accounts_raw"] = accs
+    ctx["edit_rows"] = list(zip(accs, ctx["rows"]))
 
-    # Funding columns: compute per-account dict for liquid accounts
     all_accounts = ctx["accounts"]
     budget = ctx["budget"]
     today = date.today()
@@ -122,27 +116,29 @@ def accounts_view(filename: str):
 
 @accounts_bp.route("/<filename>/accounts/cell/<int:account_id>")
 def cell_edit(filename: str, account_id: int):
-    """Return tbody with cell in edit mode."""
     field = request.args.get("field", "name")
-    path = validate_url_filename(filename)
-    data = finances.load_finances(path)
-    accounts = data.get("accounts") or []
-    acc = next((a for a in accounts if a.get("id") == account_id), None)
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
+    accs = data.get("accounts") or []
+    acc = next((a for a in accs if a.get("id") == account_id), None)
     if not acc:
         abort(404)
 
     if request.args.get("display") == "1":
-        return _render_tbody(path, edit_mode=True)
+        return _render_tbody(snapshot_id, filename, edit_mode=True)
 
     if not account_field_editable(acc, field):
-        return _render_tbody(path, edit_mode=True)
+        return _render_tbody(snapshot_id, filename, edit_mode=True)
 
     value = acc.get(field, "")
     if value is None:
         value = ""
 
     return _render_tbody(
-        path,
+        snapshot_id,
+        filename,
         edit_mode=True,
         editing_account_id=account_id,
         editing_field=field,
@@ -152,25 +148,28 @@ def cell_edit(filename: str, account_id: int):
 
 @accounts_bp.route("/<filename>/accounts/update/<int:account_id>", methods=["POST"])
 def update(filename: str, account_id: int):
-    """Update one account field. Returns full tbody HTML."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
     field = request.form.get("field", "name").strip()
     value_raw = request.form.get("value", "").strip()
 
     if not field:
-        return _render_tbody(path, edit_mode=True), 422
+        return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
-    def _get_account(p):
-        data = finances.load_finances(p)
+    engine = current_app.config["engine"]
+
+    def _get_account():
+        with engine.connect() as conn:
+            data = load_finances_from_db(conn, snapshot_id)
         return next(
             (a for a in (data.get("accounts") or []) if a.get("id") == account_id),
             None,
         )
 
-    acc = _get_account(path)
+    acc = _get_account()
     if acc is not None and not account_field_editable(acc, field):
         return _render_tbody(
-            path,
+            snapshot_id,
+            filename,
             edit_mode=True,
             updated_account_id=account_id,
             updated_field=field,
@@ -178,25 +177,27 @@ def update(filename: str, account_id: int):
 
     value, error = coerce_value(field, value_raw, ACCOUNTS_COERCION)
     if error:
-        return _render_tbody(path, edit_mode=True), 422
+        return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
-    # Skip write if unchanged
-    acc = _get_account(path)
+    acc = _get_account()
     if acc is not None and acc.get(field) == value:
         return _render_tbody(
-            path,
+            snapshot_id,
+            filename,
             edit_mode=True,
             updated_account_id=account_id,
             updated_field=field,
         )
 
     try:
-        writer_update_account(path, account_id, {field: value})
+        with engine.connect() as conn:
+            repo_accounts.update_account(conn, snapshot_id, account_id, {field: value})
     except ValueError:
-        return _render_tbody(path, edit_mode=True), 422
+        return _render_tbody(snapshot_id, filename, edit_mode=True), 422
 
     return _render_tbody(
-        path,
+        snapshot_id,
+        filename,
         edit_mode=True,
         updated_account_id=account_id,
         updated_field=field,
@@ -205,8 +206,7 @@ def update(filename: str, account_id: int):
 
 @accounts_bp.route("/<filename>/accounts/add", methods=["POST"])
 def add(filename: str):
-    """Add account. Returns new row HTML fragment."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
     name = request.form.get("name", "").strip()
     acc_type = request.form.get("type", "checking").strip() or "checking"
     account = {"name": name or "New account", "type": acc_type}
@@ -238,21 +238,24 @@ def add(filename: str):
         v = request.form.get(key, "").strip()
         if v:
             account[key] = v
+    engine = current_app.config["engine"]
     try:
-        new_id = writer_add_account(path, account)
+        with engine.connect() as conn:
+            new_id = repo_accounts.add_account(conn, snapshot_id, account)
     except ValueError:
         return "", 422
-    data = finances.load_finances(path)
-    accounts = data.get("accounts") or []
-    acc = next((a for a in accounts if a.get("id") == new_id), None)
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
+    accs = data.get("accounts") or []
+    acc = next((a for a in accs if a.get("id") == new_id), None)
     if not acc:
         abort(404)
-    n2 = finances.liquid_minus_cc(accounts)
-    account_display_by_id = finances._account_display_by_id(accounts)
+    n2 = finances.liquid_minus_cc(accs)
+    account_display_by_id = finances._account_display_by_id(accs)
     _, rows = finances._build_accounts_table(
-        accounts, n2, account_display_by_id=account_display_by_id
+        accs, n2, account_display_by_id=account_display_by_id
     )
-    idx = next((i for i, a in enumerate(accounts) if a.get("id") == new_id), -1)
+    idx = next((i for i, a in enumerate(accs) if a.get("id") == new_id), -1)
     new_row = rows[idx] if 0 <= idx < len(rows) else []
     return render_template(
         "partials/accounts_row_display.html",
@@ -267,7 +270,6 @@ def add(filename: str):
 
 @accounts_bp.route("/<filename>/accounts/delete-btn/<int:account_id>")
 def delete_btn(filename: str, account_id: int):
-    """Return delete button cell fragment (for No cancel)."""
     return render_template(
         "partials/accounts_delete_btn.html",
         filename=filename,
@@ -277,7 +279,6 @@ def delete_btn(filename: str, account_id: int):
 
 @accounts_bp.route("/<filename>/accounts/delete-confirm/<int:account_id>")
 def delete_confirm(filename: str, account_id: int):
-    """Return delete confirm cell fragment."""
     return render_template(
         "partials/accounts_delete_confirm.html",
         filename=filename,
@@ -287,10 +288,11 @@ def delete_confirm(filename: str, account_id: int):
 
 @accounts_bp.route("/<filename>/accounts/delete/<int:account_id>", methods=["POST"])
 def delete(filename: str, account_id: int):
-    """Delete account. Returns empty string so HTMX removes the row."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
     try:
-        writer_delete_account(path, account_id)
+        with engine.connect() as conn:
+            repo_accounts.delete_account(conn, snapshot_id, account_id)
     except ValueError:
         return "", 422
     return ""
@@ -298,9 +300,9 @@ def delete(filename: str, account_id: int):
 
 @accounts_bp.route("/<filename>/accounts/move/<int:account_id>", methods=["POST"])
 def move(filename: str, account_id: int):
-    """Move account up or down."""
-    path = validate_url_filename(filename)
+    snapshot_id = validate_snapshot(filename)
+    engine = current_app.config["engine"]
     return handle_move(
-        lambda p, d: writer_move_account(p, account_id, d),
-        path,
+        lambda conn, d: repo_accounts.move_account(conn, snapshot_id, account_id, d),
+        engine,
     )

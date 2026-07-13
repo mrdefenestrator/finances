@@ -8,3 +8,4 @@ source/
 data/
 !data/example.yaml
 docker-compose.yml
+*.db

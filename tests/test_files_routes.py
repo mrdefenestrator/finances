@@ -1,144 +1,122 @@
-"""Tests for the files blueprint (web/routes/files.py)."""
+"""Tests for the files blueprint (web/routes/files.py) using the DB backend."""
 
 import pytest
-import yaml
+from sqlalchemy import create_engine
 
-# ---- Fixtures ---------------------------------------------------------------
-
-EMPTY_FINANCES = {
-    "accounts": [],
-    "budget": [],
-    "assets": [],
-}
+from finances.db import init_db
+from finances.repository.snapshots import create_snapshot, get_snapshot_id
 
 
 @pytest.fixture()
-def data_dir(tmp_path, monkeypatch):
-    """Create a temp data/ directory with one default YAML file."""
-    d = tmp_path / "data"
-    d.mkdir()
-    default = d / "finances.yaml"
-    with open(default, "w") as f:
-        yaml.dump(EMPTY_FINANCES, f, sort_keys=False)
-
-    # Patch DATA_DIR in both common and files (files imports it at module level)
-    import web.routes.common as common
-    import web.routes.files as files_mod
-
-    monkeypatch.setattr(common, "DATA_DIR", d)
-    monkeypatch.setattr(common, "DEFAULT_DATA_FILE", default)
-    monkeypatch.setattr(files_mod, "DATA_DIR", d)
-    return d
+def db_engine():
+    """In-memory SQLite engine with schema applied."""
+    engine = create_engine("sqlite:///:memory:", future=True)
+    init_db(engine)
+    return engine
 
 
 @pytest.fixture()
-def client(data_dir):
-    """Flask test client with patched data directory."""
-    from web.app import app
+def client(db_engine):
+    """Flask test client with an in-memory DB that has one 'finances' snapshot."""
+    from web.app import create_app
 
+    with db_engine.connect() as conn:
+        create_snapshot(conn, "finances")
+
+    app = create_app(db_path=":memory:")
     app.config["TESTING"] = True
+    app.config["engine"] = db_engine
     with app.test_client() as c:
         yield c
 
 
-# Mutation routes respond differently based on HX-Request header.
-# HTMX requests get HX-Redirect; regular requests get a plain redirect.
 HX_HEADERS = {"HX-Request": "true"}
 
 
 # ---- New --------------------------------------------------------------------
 
 
-def test_new_file(client, data_dir):
+def test_new_snapshot(client, db_engine):
     resp = client.post("/files/new", data={"name": "budget-2026"}, headers=HX_HEADERS)
     assert resp.status_code == 200
     assert resp.headers.get("HX-Redirect") == "/f/budget-2026/accounts"
-    assert (data_dir / "budget-2026.yaml").exists()
-
-    # Verify contents are valid empty skeleton
-    with open(data_dir / "budget-2026.yaml") as f:
-        data = yaml.safe_load(f)
-    assert data == EMPTY_FINANCES
+    with db_engine.connect() as conn:
+        assert get_snapshot_id(conn, "budget-2026") is not None
 
 
-def test_new_file_adds_yaml_extension(client, data_dir):
-    resp = client.post("/files/new", data={"name": "test"}, headers=HX_HEADERS)
-    assert resp.status_code == 200
-    assert (data_dir / "test.yaml").exists()
-
-
-def test_new_file_already_exists(client, data_dir):
+def test_new_snapshot_already_exists(client, db_engine):
     resp = client.post("/files/new", data={"name": "finances"})
     assert resp.status_code == 409
 
 
-def test_new_file_invalid_name(client, data_dir):
+def test_new_snapshot_invalid_name(client, db_engine):
     resp = client.post("/files/new", data={"name": "   "})
     assert resp.status_code == 400
 
 
-def test_new_file_path_traversal(client, data_dir):
+def test_new_snapshot_path_traversal(client, db_engine):
+    # rsplit("/") keeps only the last component, so "../etc/passwd" → "passwd"
     resp = client.post("/files/new", data={"name": "../etc/passwd"}, headers=HX_HEADERS)
-    # Should sanitize to just "etcpasswd.yaml" (strips path separators)
     assert resp.status_code == 200
-    assert not (data_dir.parent / "etc" / "passwd.yaml").exists()
+    with db_engine.connect() as conn:
+        assert get_snapshot_id(conn, "passwd") is not None
 
 
 # ---- Copy -------------------------------------------------------------------
 
 
-def test_copy_file(client, data_dir):
+def test_copy_snapshot(client, db_engine):
     resp = client.post(
         "/files/copy",
-        data={"source": "finances.yaml", "name": "finances-copy"},
+        data={"source": "finances", "name": "finances-copy"},
         headers=HX_HEADERS,
     )
     assert resp.status_code == 200
     assert resp.headers.get("HX-Redirect") == "/f/finances-copy/accounts"
-    assert (data_dir / "finances-copy.yaml").exists()
+    with db_engine.connect() as conn:
+        assert get_snapshot_id(conn, "finances-copy") is not None
 
 
-def test_copy_nonexistent_source(client, data_dir):
-    resp = client.post("/files/copy", data={"source": "nope.yaml", "name": "copy"})
+def test_copy_nonexistent_source(client, db_engine):
+    resp = client.post("/files/copy", data={"source": "nope", "name": "copy"})
     assert resp.status_code == 404
 
 
-def test_copy_dest_already_exists(client, data_dir):
-    resp = client.post(
-        "/files/copy", data={"source": "finances.yaml", "name": "finances"}
-    )
+def test_copy_dest_already_exists(client, db_engine):
+    resp = client.post("/files/copy", data={"source": "finances", "name": "finances"})
     assert resp.status_code == 409
 
 
 # ---- Rename -----------------------------------------------------------------
 
 
-def test_rename_file(client, data_dir):
+def test_rename_snapshot(client, db_engine):
     resp = client.post(
         "/files/rename",
-        data={"old_name": "finances.yaml", "new_name": "renamed"},
+        data={"old_name": "finances", "new_name": "renamed"},
         headers=HX_HEADERS,
     )
     assert resp.status_code == 200
     assert resp.headers.get("HX-Redirect") == "/f/renamed/accounts"
-    assert not (data_dir / "finances.yaml").exists()
-    assert (data_dir / "renamed.yaml").exists()
+    with db_engine.connect() as conn:
+        assert get_snapshot_id(conn, "finances") is None
+        assert get_snapshot_id(conn, "renamed") is not None
 
 
-def test_rename_nonexistent(client, data_dir):
+def test_rename_nonexistent(client, db_engine):
     resp = client.post(
         "/files/rename",
-        data={"old_name": "nope.yaml", "new_name": "renamed"},
+        data={"old_name": "nope", "new_name": "renamed"},
     )
     assert resp.status_code == 404
 
 
-def test_rename_dest_exists(client, data_dir):
-    with open(data_dir / "other.yaml", "w") as f:
-        yaml.dump(EMPTY_FINANCES, f, sort_keys=False)
+def test_rename_dest_exists(client, db_engine):
+    with db_engine.connect() as conn:
+        create_snapshot(conn, "other")
     resp = client.post(
         "/files/rename",
-        data={"old_name": "finances.yaml", "new_name": "other"},
+        data={"old_name": "finances", "new_name": "other"},
     )
     assert resp.status_code == 409
 
@@ -146,39 +124,32 @@ def test_rename_dest_exists(client, data_dir):
 # ---- Delete -----------------------------------------------------------------
 
 
-def test_delete_file(client, data_dir):
-    # Create a second file and delete it — should navigate to remaining finances
-    with open(data_dir / "deleteme.yaml", "w") as f:
-        yaml.dump(EMPTY_FINANCES, f, sort_keys=False)
-
-    resp = client.post(
-        "/files/delete", data={"name": "deleteme.yaml"}, headers=HX_HEADERS
-    )
+def test_delete_snapshot(client, db_engine):
+    with db_engine.connect() as conn:
+        create_snapshot(conn, "deleteme")
+    resp = client.post("/files/delete", data={"name": "deleteme"}, headers=HX_HEADERS)
     assert resp.status_code == 200
     assert resp.headers.get("HX-Redirect") == "/f/finances/accounts"
-    assert not (data_dir / "deleteme.yaml").exists()
+    with db_engine.connect() as conn:
+        assert get_snapshot_id(conn, "deleteme") is None
 
 
-def test_delete_only_file(client, data_dir):
-    """Deleting the only file redirects to root file selection page."""
-    resp = client.post(
-        "/files/delete", data={"name": "finances.yaml"}, headers=HX_HEADERS
-    )
+def test_delete_only_snapshot(client, db_engine):
+    resp = client.post("/files/delete", data={"name": "finances"}, headers=HX_HEADERS)
     assert resp.status_code == 200
     assert resp.headers.get("HX-Redirect") == "/"
-    assert not (data_dir / "finances.yaml").exists()
 
 
-def test_delete_nonexistent(client, data_dir):
-    resp = client.post("/files/delete", data={"name": "nope.yaml"})
+def test_delete_nonexistent(client, db_engine):
+    resp = client.post("/files/delete", data={"name": "nope"})
     assert resp.status_code == 404
 
 
 # ---- Sanitization -----------------------------------------------------------
 
 
-def test_sanitize_strips_directory_components(client, data_dir):
+def test_sanitize_strips_directory_components(client, db_engine):
     resp = client.post("/files/new", data={"name": "foo/bar/baz"}, headers=HX_HEADERS)
     assert resp.status_code == 200
-    assert (data_dir / "baz.yaml").exists()
-    assert not (data_dir / "foo").exists()
+    with db_engine.connect() as conn:
+        assert get_snapshot_id(conn, "baz") is not None

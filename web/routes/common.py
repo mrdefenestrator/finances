@@ -1,79 +1,68 @@
 """Shared utilities for web routes."""
 
-import os
 import re
 from datetime import date
-from pathlib import Path
 
-from flask import abort
+from flask import abort, current_app
 
 import finances
-
-# Data file: env FINANCES_DATA or default data/finances.yaml relative to project root
-PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
-_env_data = os.environ.get("FINANCES_DATA")
-DATA_DIR = Path(_env_data).parent if _env_data else PROJECT_ROOT / "data"
-DEFAULT_DATA_FILE = DATA_DIR / "finances.yaml"
+from finances.loader import load_finances_from_db
+from finances.repository.snapshots import get_snapshot_id, list_snapshots
 
 
-def get_default_filename() -> str:
-    """Stem of the default data file (e.g. 'finances')."""
-    env_path = os.environ.get("FINANCES_DATA")
-    return Path(env_path).stem if env_path else DEFAULT_DATA_FILE.stem
+def validate_snapshot(filename: str) -> int:
+    """Validate a URL filename component and return the snapshot id.
 
-
-def validate_url_filename(filename: str) -> Path:
-    """Validate a URL filename component and return the full path.
-
-    Aborts 400 if invalid, 404 if file not found.
+    Aborts 400 if the name is syntactically invalid, 404 if no snapshot exists.
     Flask's <string:filename> converter already rejects forward slashes.
     """
     if "\\" in filename or ".." in filename:
-        abort(400, description="Invalid filename")
+        abort(400, description="Invalid snapshot name")
     if not re.match(r"^[a-zA-Z0-9 _\-.]+$", filename):
-        abort(400, description="Invalid filename")
-    full_path = (DATA_DIR / (filename + ".yaml")).resolve()
-    if not str(full_path).startswith(str(DATA_DIR.resolve())):
-        abort(400, description="Invalid path")
-    if not full_path.exists():
-        abort(404, description=f"File not found: {filename}.yaml")
-    return full_path
+        abort(400, description="Invalid snapshot name")
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        snapshot_id = get_snapshot_id(conn, filename)
+    if snapshot_id is None:
+        abort(404, description=f"Snapshot not found: {filename}")
+    return snapshot_id
 
 
-def get_common_context(path: Path, edit_mode: bool):
+def get_default_filename() -> str:
+    """Return the name of the first available snapshot, or ''."""
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        names = list_snapshots(conn)
+    return names[0] if names else ""
+
+
+def get_common_context(snapshot_id: int, filename: str, edit_mode: bool):
     """Data and computed values shared by all views."""
-    data = finances.load_finances(path)
-    accounts = data.get("accounts") or []
+    engine = current_app.config["engine"]
+    with engine.connect() as conn:
+        data = load_finances_from_db(conn, snapshot_id)
+        available_files = list_snapshots(conn)
+
+    accs = data.get("accounts") or []
     budget = data.get("budget") or []
     assets = data.get("assets") or []
 
     today = date.today()
     year, month, day = today.year, today.month, today.day
 
-    n2 = finances.liquid_minus_cc(accounts)
+    n2 = finances.liquid_minus_cc(accs)
     n3 = finances.projected_change_to_eom(budget, year, month, day)
     n6 = finances.net_nonliquid_total(assets)
-    account_display = finances._account_display_by_id(accounts)
-
-    # File picker context — emit stems (no .yaml)
-    available_files = (
-        sorted(
-            f.stem
-            for f in DATA_DIR.iterdir()
-            if f.is_file() and f.suffix in (".yaml", ".yml")
-        )
-        if DATA_DIR.exists()
-        else []
-    )
+    account_display = finances._account_display_by_id(accs)
 
     return {
-        "data_file": str(path),
-        "filename": path.stem,
-        "active_file": path.stem,
+        "snapshot_id": snapshot_id,
+        "filename": filename,
+        "active_file": filename,
         "available_files": available_files,
         "as_of_date": today.isoformat(),
         "budget_label": f"budget to end of {today.strftime('%b %Y')}",
-        "accounts": accounts,
+        "accounts": accs,
         "budget": budget,
         "assets": assets,
         "year": year,

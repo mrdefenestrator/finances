@@ -21,12 +21,8 @@ description = "Lint with ruff"
 run = "uv run ruff check --fix *.py finances/ tests/ web/"
 description = "Fix lint issues with ruff"
 
-[tasks.validate]
-run = "uv run python validate_yaml.py"
-description = "Validate finances YAML files against schema"
-
 [tasks.test]
-depends = ["format-check", "lint", "validate", "test-unit", "test-web"]
+depends = ["format-check", "lint", "test-unit", "test-web"]
 description = "Run all CI checks"
 
 [tasks.test-unit]
